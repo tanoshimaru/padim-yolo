@@ -1,0 +1,12 @@
+*.engine
+*.onnx
+*.pt
+
+*.zip
+
+*.jpg
+
+.venv
+.envrc
+
+distribution_result.txt
