@@ -1,5 +1,5 @@
 services:
-  yolo:
+  app:
     build:
       context: .
     runtime: nvidia
