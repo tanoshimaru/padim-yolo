@@ -16,28 +16,22 @@ import logging
 from datetime import datetime
 from typing import Dict, Any
 from pathlib import Path
+import numpy as np
+
+import cv2
+from anomalib.models import Padim
+from anomalib.engine import Engine
+from anomalib.data import Folder
+from dotenv import load_dotenv
+from person_detector import detect_person_and_get_grid
+from image_manager import ImageManager
+
 
 # 環境変数を明示的に読み込み
 try:
-    from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    # python-dotenvがない場合は無視
     pass
-
-try:
-    import cv2
-    from anomalib.models import Padim
-    from anomalib.engine import Engine
-    from anomalib.data import Folder
-    from person_detector import detect_person_and_get_grid
-    from image_manager import ImageManager
-except ImportError as e:
-    print(f"必要なライブラリのインポートに失敗しました: {e}")
-    print(
-        "uv run --with opencv-python --with anomalib python main.py で実行してください"
-    )
-    sys.exit(1)
 
 
 def setup_logging():
@@ -101,10 +95,10 @@ class PaDiMAnomalyDetector:
             # 単一画像の推論用データモジュール
             datamodule = Folder(
                 name="inference",
-                root="./", 
-                normal_dir="./tmp_normal", 
+                root="./",
+                normal_dir="./tmp_normal",
                 abnormal_dir="./tmp_abnormal",
-                task="classification"
+                task="classification",
             )
 
             # 一時ディレクトリ作成
@@ -126,6 +120,12 @@ class PaDiMAnomalyDetector:
                 if predictions and len(predictions) > 0:
                     pred = predictions[0]
 
+                    anomaly_map = (
+                        pred.anomaly_map.cpu().numpy()
+                        if hasattr(pred, "anomaly_map")
+                        else None
+                    )
+
                     result = {
                         "anomaly_score": float(
                             pred.pred_score.item()
@@ -137,10 +137,15 @@ class PaDiMAnomalyDetector:
                             if hasattr(pred, "pred_label")
                             else False
                         ),
-                        "anomaly_map": pred.anomaly_map.cpu().numpy()
-                        if hasattr(pred, "anomaly_map")
-                        else None,
+                        "anomaly_map": anomaly_map,
                     }
+
+                    # 最も異常度が高い座標区画を特定
+                    if anomaly_map is not None:
+                        max_anomaly_coords = self._find_max_anomaly_coordinates(
+                            anomaly_map
+                        )
+                        result["max_anomaly_coordinates"] = max_anomaly_coords
 
                     logging.info(
                         f"PaDiM推論完了: score={result['anomaly_score']:.4f}, anomaly={result['is_anomaly']}"
@@ -165,7 +170,58 @@ class PaDiMAnomalyDetector:
                 "anomaly_score": 0.0,
                 "is_anomaly": False,
                 "anomaly_map": None,
+                "max_anomaly_coordinates": None,
                 "error": str(e),
+            }
+
+    def _find_max_anomaly_coordinates(self, anomaly_map: np.ndarray) -> Dict[str, Any]:
+        """異常マップから最も異常度が高い座標区画を特定"""
+        try:
+            if anomaly_map.ndim == 3:
+                # チャンネル次元がある場合は最初のチャンネルを使用
+                anomaly_map = anomaly_map[0]
+            elif anomaly_map.ndim == 4:
+                # バッチ次元とチャンネル次元がある場合
+                anomaly_map = anomaly_map[0, 0]
+
+            # 最大異常値とその座標を取得
+            max_anomaly_value = float(np.max(anomaly_map))
+            max_coords = np.unravel_index(np.argmax(anomaly_map), anomaly_map.shape)
+
+            # 座標を画像サイズに正規化（0-1の範囲）
+            height, width = anomaly_map.shape
+            normalized_y = float(max_coords[0]) / height
+            normalized_x = float(max_coords[1]) / width
+
+            # 4x4グリッドでの区画番号を計算
+            grid_y = int(normalized_y * 4)
+            grid_x = int(normalized_x * 4)
+            grid_index = grid_y * 4 + grid_x
+
+            # 範囲チェック
+            grid_y = min(max(grid_y, 0), 3)
+            grid_x = min(max(grid_x, 0), 3)
+            grid_index = min(max(grid_index, 0), 15)
+
+            return {
+                "max_anomaly_value": max_anomaly_value,
+                "pixel_coordinates": {"x": int(max_coords[1]), "y": int(max_coords[0])},
+                "normalized_coordinates": {"x": normalized_x, "y": normalized_y},
+                "grid_coordinates": {"x": grid_x, "y": grid_y},
+                "grid_index": grid_index,
+                "anomaly_map_shape": list(anomaly_map.shape),
+            }
+
+        except Exception as e:
+            logging.error(f"最大異常座標の特定でエラー: {e}")
+            return {
+                "error": str(e),
+                "max_anomaly_value": 0.0,
+                "pixel_coordinates": {"x": 0, "y": 0},
+                "normalized_coordinates": {"x": 0.0, "y": 0.0},
+                "grid_coordinates": {"x": 0, "y": 0},
+                "grid_index": 0,
+                "anomaly_map_shape": [],
             }
 
 
@@ -211,8 +267,7 @@ class MainProcessor:
                 password = os.getenv("RTSP_PASSWORD", "password")
                 ip = os.getenv("RTSP_IP", "ip_address")
                 port = os.getenv("RTSP_PORT", "554")
-                
-                
+
                 rtsp_url = (
                     f"rtsp://{username}:{password}@{ip}:{port}/profile2/media.smp"
                 )
@@ -229,7 +284,7 @@ class MainProcessor:
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             # タイムアウト設定（OpenCVのプロパティとして）
             cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000)  # 10秒でタイムアウト
-            cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)   # 読み取りタイムアウト5秒
+            cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)  # 読み取りタイムアウト5秒
 
             if not cap.isOpened():
                 self.logger.error(f"RTSPストリームに接続できません: {rtsp_url}")
@@ -245,10 +300,13 @@ class MainProcessor:
                 else:
                     if attempt < 2:  # 最後の試行でなければ少し待機
                         import time
+
                         time.sleep(0.5)
 
             if not ret or frame is None:
-                self.logger.error("RTSPストリームからフレームを取得できません（全試行失敗）")
+                self.logger.error(
+                    "RTSPストリームからフレームを取得できません（全試行失敗）"
+                )
                 cap.release()
                 return False
 
@@ -375,6 +433,23 @@ def main():
             padim_result = result["padim_result"]
             print(f"異常スコア: {padim_result.get('anomaly_score', 0):.4f}")
             print(f"異常判定: {padim_result.get('is_anomaly', False)}")
+
+            # 最も異常度が高い座標区画の情報を出力
+            max_anomaly_coords = padim_result.get("max_anomaly_coordinates")
+            if max_anomaly_coords and not max_anomaly_coords.get("error"):
+                print("=== 最も異常度が高い座標区画 ===")
+                print(f"最大異常値: {max_anomaly_coords['max_anomaly_value']:.6f}")
+                print(
+                    f"ピクセル座標: x={max_anomaly_coords['pixel_coordinates']['x']}, y={max_anomaly_coords['pixel_coordinates']['y']}"
+                )
+                print(
+                    f"正規化座標: x={max_anomaly_coords['normalized_coordinates']['x']:.4f}, y={max_anomaly_coords['normalized_coordinates']['y']:.4f}"
+                )
+                print(
+                    f"グリッド座標: x={max_anomaly_coords['grid_coordinates']['x']}, y={max_anomaly_coords['grid_coordinates']['y']}"
+                )
+                print(f"グリッド番号: Grid {max_anomaly_coords['grid_index']:02d}")
+                print(f"異常マップサイズ: {max_anomaly_coords['anomaly_map_shape']}")
 
         print(f"最終判定: {result.get('final_decision', 'unknown')}")
 
