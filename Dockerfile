@@ -22,9 +22,9 @@ RUN chmod 0644 /etc/cron.d/padim-yolo-cron && \
 # Create logs directory
 RUN mkdir -p /app/logs
 
-# Create startup script
+# Copy and set permissions for startup script
 COPY docker-start.sh /app/docker-start.sh
-RUN chmod +x /app/docker-start.sh
+RUN chmod 755 /app/docker-start.sh
 
 # Set the entry point to start cron and keep container running
 CMD ["/app/docker-start.sh"]
