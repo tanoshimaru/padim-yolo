@@ -183,22 +183,16 @@ class MainProcessor:
             # modelsディレクトリを作成
             os.makedirs("models", exist_ok=True)
 
-            if os.path.exists("models/yolo11n.engine"):
-                self.logger.info("yolo11n.engineファイルを使用")
-                self.yolo_model = YOLO("models/yolo11n.engine", task="detect")
-            elif os.path.exists("models/yolo11n.pt"):
-                self.logger.info("yolo11n.ptファイルを使用")
-                self.yolo_model = YOLO("models/yolo11n.pt")
-            else:
-                self.logger.info("YOLOモデルファイルが見つかりません。yolo11n.ptをダウンロードします")
-                # YOLOモデルを自動ダウンロード
-                self.yolo_model = YOLO("yolo11n.pt")
-                # ダウンロードしたモデルをmodelsディレクトリに保存
-                import shutil
-                if os.path.exists("yolo11n.pt"):
-                    shutil.move("yolo11n.pt", "models/yolo11n.pt")
-                    self.logger.info("yolo11n.ptをmodels/に移動しました")
-
+            if not os.path.exists("models/yolo11n.engine"):
+                self.logger.info("yolo11n.engineファイルが見つかりません。")
+                if not os.path.exists("models/yolo11n.pt"):
+                    self.logger.info("yolo11n.ptファイルが見つかりません。ダウンロードします。")
+                    # YOLOモデルを自動ダウンロード
+                    self.yolo_model = YOLO("models/yolo11n.pt")
+                # TensorRTエンジンを生成
+                self.yolo_model.export(format="engine", task="detect")
+            self.logger.info("yolo11n.engineファイルを使用")
+            self.yolo_model = YOLO("models/yolo11n.engine", task="detect")
             self.logger.info("YOLOモデルを読み込みました")
 
         except Exception as e:
