@@ -28,10 +28,16 @@ if [ -f .env ]; then
     export $(grep -v '^#' .env | xargs)
 fi
 
+# ホストのUID/GIDを設定
+export UID=$(id -u)
+export GID=$(id -g)
+export USERNAME=$(whoami)
+
 # アクションに応じて実行
 case $ACTION in
     "start")
         echo "=== RTSPカメラ異常検知システム起動 ==="
+        echo "ユーザー設定: USERNAME=$USERNAME, UID=$UID, GID=$GID"
         echo "RTSP設定: rtsp://${RTSP_USERNAME:-admin}:***@${RTSP_IP:-192.168.1.100}:${RTSP_PORT:-554}/profile2/media.smp"
         echo ""
         echo "バックグラウンドモードで起動中..."

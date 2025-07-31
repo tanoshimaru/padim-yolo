@@ -1,5 +1,5 @@
-FROM ultralytics/ultralytics:latest-jetson-jetpack6
-# FROM ultralytics/ultralytics:latest
+# FROM ultralytics/ultralytics:latest-jetson-jetpack6
+FROM ultralytics/ultralytics:latest
 
 # ユーザーを作成
 ARG USERNAME=appuser
