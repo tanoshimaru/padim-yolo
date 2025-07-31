@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import List
 
 from anomalib.models import Padim
-from anomalib.preprocessing import Preprocessor
 from anomalib.engine import Engine
 from anomalib.data import Folder
 
@@ -117,7 +116,7 @@ class AdditionalTrainer:
 
     def _create_new_model(self) -> Padim:
         """新規PaDiMモデルの作成"""
-        pre_processor = Preprocessor(image_size=(256, 256))
+        pre_processor = Padim.configure_pre_processor(image_size=(256, 256))
         return Padim(
             backbone="resnet18",
             layers=["layer1", "layer2", "layer3"],

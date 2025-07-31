@@ -20,7 +20,6 @@ from pathlib import Path
 try:
     import cv2
     from anomalib.models import Padim
-    from anomalib.pre_processing import Preprocessor
     from anomalib.engine import Engine
     from anomalib.data import Folder
     from person_detector import detect_person_and_get_grid
@@ -68,7 +67,7 @@ class PaDiMAnomalyDetector:
                 self.model.eval()
                 logging.info(f"学習済みPaDiMモデルを読み込みました: {self.model_path}")
             else:
-                pre_processor = Preprocessor(image_size=(256, 256))
+                pre_processor = Padim.configure_pre_processor(image_size=(256, 256))
                 self.model = Padim(
                     backbone="resnet18",
                     layers=["layer1", "layer2", "layer3"],
