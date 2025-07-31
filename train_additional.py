@@ -4,7 +4,7 @@ PaDiM 追加学習スクリプト（土曜日実行）
 
 機能:
 - images/no_person, images/grid_00~grid_15 の画像を使用してPaDiMの追加学習
-- 学習結果を images/models に保存
+- 学習結果を models に保存
 """
 
 import os
@@ -45,7 +45,7 @@ class AdditionalTrainer:
     def __init__(self):
         self.logger = setup_logging()
         self.image_manager = ImageManager()
-        self.models_dir = Path("images/models")
+        self.models_dir = Path("models")
         self.models_dir.mkdir(exist_ok=True)
 
     def prepare_training_data(self) -> str:

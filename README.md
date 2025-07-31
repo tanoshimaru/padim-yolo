@@ -15,7 +15,7 @@ anomalib を使用して PaDiM で異常検知を行い、YOLO で人の検出�
 ### 土曜日処理
 
 - **追加学習**: `images/no_person`、`images/grid_00~grid_15`の画像を使用して PaDiM の追加学習
-- **モデル保存**: 学習結果を`images/models`に保存
+- **モデル保存**: 学習結果を`models`に保存
 
 ### 日曜日
 
@@ -149,7 +149,7 @@ python run_daily.py
 
 - 初回実行時は未学習モデルを使用
 - 土曜日の追加学習でモデルが更新される
-- 学習済みモデルは`images/models/padim_model.ckpt`に保存
+- 学習済みモデルは`models/padim_model.ckpt`に保存
 
 ### カメラ設定
 

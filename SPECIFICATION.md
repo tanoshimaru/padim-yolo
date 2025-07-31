@@ -12,4 +12,4 @@
   - 画像保存枚数は各フォルダごとに 200 枚までで，200 枚を超えた場合は古い画像から削除，画像名は YYYYMMDD_HHMMSS.png の形式
 - 土曜日：追加学習
   - images/no_person, images/grid_00~grid_15 の画像を用いて PaDiM の追加学習を行う
-  - 追加学習の結果は images/models に保存
+  - 追加学習の結果は models に保存
