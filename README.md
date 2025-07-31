@@ -77,17 +77,7 @@ grid_12  grid_13  grid_14  grid_15
 
 ## 実行方法
 
-### 1. 依存関係のインストール
-
-```bash
-# uvを使用（推奨）
-uv sync
-
-# または手動でインストール
-pip install -r requirements.txt
-```
-
-### 2. 単発実行
+### 1. 単発実行
 
 #### 平日処理
 
@@ -101,7 +91,7 @@ uv run --with opencv-python --with anomalib python main.py
 uv run --with anomalib python train_additional.py
 ```
 
-### 3. 日次自動実行
+### 2. 日次自動実行
 
 ```bash
 python run_daily.py
@@ -109,7 +99,7 @@ python run_daily.py
 
 自動的に曜日を判定して適切な処理を実行します。
 
-### 4. crontab でのスケジュール実行
+### 3. crontab でのスケジュール実行
 
 ```bash
 # crontabを編集
