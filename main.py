@@ -225,28 +225,40 @@ class MainProcessor:
 
             self.logger.info(f"RTSP接続を試行: {rtsp_url}")
 
-            # RTSPストリームに接続
-            cap = cv2.VideoCapture(rtsp_url)
+            # RTSPストリームに接続（FFmpegバックエンドを明示的に指定）
+            cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
 
-            # 接続タイムアウト設定 (3秒に短縮)
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            cap.set(cv2.CAP_PROP_FPS, 30)
-            cap.set(cv2.CAP_PROP_POS_MSEC, 3000)  # 3秒でタイムアウト
+            # 接続設定を最適化
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # バッファサイズを最小に
+            cap.set(cv2.CAP_PROP_FPS, 15)  # フレームレートを下げて安定化
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            # タイムアウト設定（OpenCVのプロパティとして）
+            cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000)  # 10秒でタイムアウト
+            cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)   # 読み取りタイムアウト5秒
 
             if not cap.isOpened():
                 self.logger.error(f"RTSPストリームに接続できません: {rtsp_url}")
                 cap.release()
-                # フォールバック: ダミー画像を生成
-                return self._create_dummy_image(output_path)
+                return False
 
-            # フレームを読み取り
-            ret, frame = cap.read()
+            # フレームを読み取り（複数回試行）
+            frame = None
+            for attempt in range(3):  # 最大3回試行
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    self.logger.info(f"フレーム取得成功 (試行回数: {attempt + 1})")
+                    break
+                else:
+                    self.logger.warning(f"フレーム取得失敗 (試行 {attempt + 1}/3)")
+                    if attempt < 2:  # 最後の試行でなければ少し待機
+                        import time
+                        time.sleep(0.5)
 
             if not ret or frame is None:
-                self.logger.error("RTSPストリームからフレームを取得できません")
+                self.logger.error("RTSPストリームからフレームを取得できません（全試行失敗）")
                 cap.release()
-                # フォールバック: ダミー画像を生成
-                return self._create_dummy_image(output_path)
+                return False
 
             # 画像を保存
             success = cv2.imwrite(output_path, frame)
@@ -261,31 +273,6 @@ class MainProcessor:
 
         except Exception as e:
             self.logger.error(f"RTSP画像撮影エラー: {e}")
-            # エラー時もフォールバック: ダミー画像を生成
-            return self._create_dummy_image(output_path)
-
-    def _create_dummy_image(self, output_path: str) -> bool:
-        """テスト用のダミー画像を生成"""
-        try:
-            import numpy as np
-            
-            self.logger.info("RTSPが利用できないため、テスト用ダミー画像を生成します")
-            
-            # 640x480のランダムな画像を生成
-            dummy_image = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
-            
-            # 画像を保存
-            success = cv2.imwrite(output_path, dummy_image)
-            
-            if success:
-                self.logger.info(f"ダミー画像を生成しました: {output_path}")
-                return True
-            else:
-                self.logger.error(f"ダミー画像の保存に失敗: {output_path}")
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"ダミー画像生成エラー: {e}")
             return False
 
     def process_weekday(self) -> Dict[str, Any]:
