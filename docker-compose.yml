@@ -2,8 +2,11 @@ services:
   app:
     build:
       context: .
+      args:
+        USERNAME: ${USERNAME:-appuser}
+        USER_UID: ${UID:-1000}
+        USER_GID: ${GID:-1000}
     runtime: nvidia
-    user: "${UID:-1000}:${GID:-1000}"  # ホストユーザーのUID/GIDを使用
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - TZ=Asia/Tokyo  # タイムゾーン設定（cronの時刻を日本時間に）

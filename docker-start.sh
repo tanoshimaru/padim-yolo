@@ -6,7 +6,7 @@ echo "日時: $(date)"
 
 # cronサービスを開始
 echo "cronサービスを開始中..."
-service cron start
+sudo service cron start
 
 # cron設定を確認
 echo "cron設定確認:"
@@ -31,6 +31,6 @@ while true; do
     # cronサービスが停止していた場合は再起動
     if ! pgrep cron > /dev/null; then
         echo "[$(date)] cronサービスが停止していたため再起動します" >> /app/logs/cron.log
-        service cron start
+        sudo service cron start
     fi
 done

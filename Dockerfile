@@ -1,8 +1,24 @@
 FROM ultralytics/ultralytics:latest-jetson-jetpack6
 # FROM ultralytics/ultralytics:latest
 
+# ユーザーを作成
+ARG USERNAME=appuser
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+
+# グループとユーザーを作成
+RUN groupadd --gid $USER_GID $USERNAME \
+    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
+    && apt-get update \
+    && apt-get install -y sudo \
+    && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME
+
 # Set the working directory
 WORKDIR /app
+
+# ディレクトリの所有者を変更
+RUN chown -R $USERNAME:$USERNAME /app
 
 # Install cron and required packages, set timezone
 ENV DEBIAN_FRONTEND=noninteractive
@@ -29,6 +45,9 @@ RUN mkdir -p /app/logs
 # Copy and set permissions for startup script
 COPY docker-start.sh /app/docker-start.sh
 RUN chmod 755 /app/docker-start.sh
+
+# ユーザーを切り替え
+USER $USERNAME
 
 # Set the entry point to start cron and keep container running
 CMD ["/app/docker-start.sh"]
