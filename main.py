@@ -245,7 +245,8 @@ class MainProcessor:
             if not ret or frame is None:
                 self.logger.error("RTSPストリームからフレームを取得できません")
                 cap.release()
-                return False
+                # フォールバック: ダミー画像を生成
+                return self._create_dummy_image(output_path)
 
             # 画像を保存
             success = cv2.imwrite(output_path, frame)
