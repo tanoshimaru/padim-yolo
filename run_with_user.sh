@@ -7,9 +7,9 @@ export GID=$(id -g)
 echo "UID: $UID, GID: $GID でコンテナを起動します"
 
 # 既存のコンテナを停止・削除
-docker-compose down
+docker compose down
 
 # 新しいコンテナを起動
-docker-compose up -d
+docker compose up -d
 
 echo "コンテナが起動しました"
