@@ -20,6 +20,7 @@ from pathlib import Path
 try:
     import cv2
     from anomalib.models import Padim
+    from anomalib.pre_processing import Preprocessor
     from anomalib.engine import Engine
     from anomalib.data import Folder
     from person_detector import detect_person_and_get_grid
@@ -67,12 +68,12 @@ class PaDiMAnomalyDetector:
                 self.model.eval()
                 logging.info(f"学習済みPaDiMモデルを読み込みました: {self.model_path}")
             else:
-                # 初期モデル（未学習）
+                pre_processor = Preprocessor(image_size=(256, 256))
                 self.model = Padim(
                     backbone="resnet18",
                     layers=["layer1", "layer2", "layer3"],
-                    input_size=[256, 256],
                     pre_trained=True,
+                    pre_processor=pre_processor,
                 )
                 logging.warning(
                     "学習済みモデルが見つかりません。初期モデルを使用します。"
@@ -196,33 +197,35 @@ class MainProcessor:
                 password = os.getenv("RTSP_PASSWORD", "password")
                 ip = os.getenv("RTSP_IP", "ip_address")
                 port = os.getenv("RTSP_PORT", "554")
-                rtsp_url = f"rtsp://{username}:{password}@{ip}:{port}/profile2/media.smp"
-            
+                rtsp_url = (
+                    f"rtsp://{username}:{password}@{ip}:{port}/profile2/media.smp"
+                )
+
             self.logger.info(f"RTSP接続を試行: {rtsp_url}")
-            
+
             # RTSPストリームに接続
             cap = cv2.VideoCapture(rtsp_url)
-            
+
             # 接続タイムアウト設定 (5秒)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             cap.set(cv2.CAP_PROP_FPS, 30)
-            
+
             if not cap.isOpened():
                 self.logger.error(f"RTSPストリームに接続できません: {rtsp_url}")
                 return False
-            
+
             # フレームを読み取り
             ret, frame = cap.read()
-            
+
             if not ret or frame is None:
                 self.logger.error("RTSPストリームからフレームを取得できません")
                 cap.release()
                 return False
-            
+
             # 画像を保存
             success = cv2.imwrite(output_path, frame)
             cap.release()
-            
+
             if success:
                 self.logger.info(f"RTSPから画像を撮影しました: {output_path}")
                 return True
