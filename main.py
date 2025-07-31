@@ -207,6 +207,10 @@ class MainProcessor:
                 password = os.getenv("RTSP_PASSWORD", "password")
                 ip = os.getenv("RTSP_IP", "ip_address")
                 port = os.getenv("RTSP_PORT", "554")
+                
+                # デバッグ情報を追加
+                self.logger.info(f"環境変数確認 - USERNAME: {username}, IP: {ip}, PORT: {port}")
+                
                 rtsp_url = (
                     f"rtsp://{username}:{password}@{ip}:{port}/profile2/media.smp"
                 )
