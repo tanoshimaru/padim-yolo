@@ -60,10 +60,14 @@ def detect_person_and_get_grid(
     """
     # モデルが指定されていない場合は作成
     if model is None:
-        if os.path.exists("models/yolo11n.engine"):
-            model = YOLO("models/yolo11n.engine", task="detect")
-        elif os.path.exists("models/yolo11n.pt"):
-            model = YOLO("models/yolo11n.pt")
+        if not os.path.exists("models/yolo11n.engine"):
+            if not os.path.exists("models/yolo11n.pt"):
+                # YOLOモデルを自動ダウンロード
+                model = YOLO("models/yolo11n.pt")
+            # TensorRTエンジンを生成
+            model.export(format="engine", task="detect")
+        model = YOLO("models/yolo11n.engine", task="detect")
+
         else:
             raise FileNotFoundError("YOLOモデルファイルが見つかりません")
 
