@@ -98,35 +98,35 @@ case $ACTION in
         # 実行モード
         if [ "$DAEMON_MODE" = true ]; then
             echo "バックグラウンドモードで起動中..."
-            docker-compose up -d $BUILD_ARGS
+            docker compose up -d $BUILD_ARGS
             echo "コンテナがバックグラウンドで起動しました"
             echo "ログを確認: $0 --logs"
         else
             echo "フォアグラウンドモードで起動中..."
-            docker-compose up $BUILD_ARGS
+            docker compose up $BUILD_ARGS
         fi
         ;;
         
     "stop")
         echo "コンテナを停止中..."
-        docker-compose down
+        docker compose down
         echo "コンテナが停止しました"
         ;;
         
     "restart")
         echo "コンテナを再起動中..."
-        docker-compose down
-        docker-compose up -d --build
+        docker compose down
+        docker compose up -d --build
         echo "コンテナが再起動しました"
         ;;
         
     "logs")
         echo "=== コンテナログ ==="
-        docker-compose logs -f
+        docker compose logs -f
         ;;
         
     "test-rtsp")
         echo "=== RTSP接続テスト ==="
-        docker-compose exec -T app python test_rtsp_simple.py
+        docker compose exec -T app python test_rtsp_simple.py
         ;;
 esac
