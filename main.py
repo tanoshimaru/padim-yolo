@@ -100,7 +100,11 @@ class PaDiMAnomalyDetector:
 
             # 単一画像の推論用データモジュール
             datamodule = Folder(
-                root="./", normal_dir="./tmp_normal", abnormal_dir="./tmp_abnormal"
+                name="inference",
+                root="./", 
+                normal_dir="./tmp_normal", 
+                abnormal_dir="./tmp_abnormal",
+                task="classification"
             )
 
             # 一時ディレクトリ作成
@@ -185,10 +189,8 @@ class MainProcessor:
 
             if not os.path.exists("models/yolo11n.engine"):
                 self.logger.info("yolo11n.engineファイルが見つかりません。")
-                if not os.path.exists("models/yolo11n.pt"):
-                    self.logger.info("yolo11n.ptファイルが見つかりません。ダウンロードします。")
-                    # YOLOモデルを自動ダウンロード
-                    self.yolo_model = YOLO("models/yolo11n.pt")
+                # なければYOLOモデルを自動ダウンロード
+                self.yolo_model = YOLO("models/yolo11n.pt")
                 # TensorRTエンジンを生成
                 self.yolo_model.export(format="engine", task="detect")
             self.logger.info("yolo11n.engineファイルを使用")
