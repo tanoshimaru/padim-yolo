@@ -4,9 +4,11 @@ FROM ultralytics/ultralytics:latest-jetson-jetpack6
 # Set the working directory
 WORKDIR /app
 
-# Install cron and required packages
-RUN apt-get update && apt-get install -y cron && \
-    rm -rf /var/lib/apt/lists/*
+# Install cron and required packages, set timezone
+RUN apt-get update && apt-get install -y cron tzdata && \
+    rm -rf /var/lib/apt/lists/* && \
+    ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime && \
+    echo "Asia/Tokyo" > /etc/timezone
 
 RUN pip install "setuptools<69" && \
     pip install anomalib dotenv einops FrEIA kornia lightning open-clip-torch scikit-image tifffile timm && \
