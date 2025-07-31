@@ -186,34 +186,52 @@ class MainProcessor:
             self.logger.error(f"YOLOモデルの読み込みに失敗: {e}")
             raise
 
-    def capture_image(self, output_path: str) -> bool:
-        """画像撮影（実際のカメラ実装が必要）"""
+    def capture_image(self, output_path: str, rtsp_url: str | None = None) -> bool:
+        """RTSP カメラから画像撮影"""
         try:
-            # TODO: 実際のカメラデバイスからの撮影実装
-            # ここではダミーの黒い画像を作成
-            import numpy as np
-
-            dummy_image = np.zeros((480, 640, 3), dtype=np.uint8)
-            cv2.putText(
-                dummy_image,
-                f"Captured at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (255, 255, 255),
-                2,
-            )
-
-            success = cv2.imwrite(output_path, dummy_image)
+            # RTSP URL が指定されていない場合のデフォルト値
+            if rtsp_url is None:
+                # 環境変数から個別に取得してURL構築
+                username = os.getenv("RTSP_USERNAME", "username")
+                password = os.getenv("RTSP_PASSWORD", "password")
+                ip = os.getenv("RTSP_IP", "ip_address")
+                port = os.getenv("RTSP_PORT", "554")
+                rtsp_url = f"rtsp://{username}:{password}@{ip}:{port}/profile2/media.smp"
+            
+            self.logger.info(f"RTSP接続を試行: {rtsp_url}")
+            
+            # RTSPストリームに接続
+            cap = cv2.VideoCapture(rtsp_url)
+            
+            # 接続タイムアウト設定 (5秒)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            cap.set(cv2.CAP_PROP_FPS, 30)
+            
+            if not cap.isOpened():
+                self.logger.error(f"RTSPストリームに接続できません: {rtsp_url}")
+                return False
+            
+            # フレームを読み取り
+            ret, frame = cap.read()
+            
+            if not ret or frame is None:
+                self.logger.error("RTSPストリームからフレームを取得できません")
+                cap.release()
+                return False
+            
+            # 画像を保存
+            success = cv2.imwrite(output_path, frame)
+            cap.release()
+            
             if success:
-                self.logger.info(f"画像を撮影しました: {output_path}")
+                self.logger.info(f"RTSPから画像を撮影しました: {output_path}")
                 return True
             else:
                 self.logger.error(f"画像の保存に失敗: {output_path}")
                 return False
 
         except Exception as e:
-            self.logger.error(f"画像撮影エラー: {e}")
+            self.logger.error(f"RTSP画像撮影エラー: {e}")
             return False
 
     def process_weekday(self) -> Dict[str, Any]:
