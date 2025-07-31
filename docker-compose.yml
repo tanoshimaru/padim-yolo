@@ -5,6 +5,10 @@ services:
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
+      - RTSP_USERNAME=${RTSP_USERNAME:-admin}
+      - RTSP_PASSWORD=${RTSP_PASSWORD:-password123}
+      - RTSP_IP=${RTSP_IP:-192.168.1.100}
+      - RTSP_PORT=${RTSP_PORT:-554}
     tty: true
     stdin_open: true
     volumes:
