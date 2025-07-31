@@ -1,12 +1,12 @@
 # PaDiM + YOLO 異常検知システム
 
-anomalib を使用して PaDiM で異常検知を行い、YOLO で人の検出を行うシステムです。
+RTSPカメラから取得した映像を使って、YOLOによる人物検出とPaDiMによる異常検知を行うシステムです。
 
 ## 機能概要
 
 ### 平日処理（月〜金）
 
-1. **撮影**: カメラから画像を撮影
+1. **RTSP撮影**: RTSPカメラから画像を撮影
 2. **人検出**: YOLO で人が写っているかを検出
 3. **異常検知**: 人が写っている場合、PaDiM で異常検知を実行
 4. **画像保存**: 結果に基づいて適切なフォルダに画像を保存
@@ -28,21 +28,24 @@ padim-yolo/
 ├── main.py                    # メイン処理（平日実行）
 ├── train_additional.py        # 追加学習（土曜実行）
 ├── run_daily.py              # 日次実行スクリプト
+├── run_container.sh          # コンテナ管理スクリプト
 ├── person_detector.py        # YOLO人検出モジュール
 ├── image_manager.py          # 画像管理モジュール
+├── test_rtsp.py              # RTSP接続テスト用スクリプト
+├── test_rtsp_simple.py       # シンプルRTSP接続テスト
+├── .env                      # 環境変数設定（RTSP設定など）
 ├── Dockerfile                # Dockerコンテナ設定
 ├── docker-compose.yml        # Docker Compose設定
 ├── docker-start.sh           # コンテナ起動スクリプト
 ├── docker-crontab.txt        # コンテナ用cron設定
-├── models/                   # YOLOモデル
-│   ├── yolo11n.pt
+├── models/                   # モデル格納ディレクトリ
+│   ├── yolo11n.pt           # YOLO11モデル（自動ダウンロード）
 │   └── yolo11n.onnx
 ├── images/                   # 画像保存ディレクトリ
 │   ├── no_person/           # 人が写っていない画像（最大200枚）
 │   ├── grid_00/             # グリッド0の正常画像（最大200枚）
 │   ├── grid_01/             # グリッド1の正常画像（最大200枚）
-│   ├── ...                  # grid_02 ~ grid_15
-│   └── models/              # PaDiMモデル保存先
+│   └── ...                  # grid_02 ~ grid_15
 └── logs/                    # ログファイル
     ├── main_YYYYMMDD.log
     ├── train_additional_YYYYMMDD.log
@@ -82,30 +85,31 @@ grid_12  grid_13  grid_14  grid_15
 
 ## 実行方法
 
-### 1. Docker コンテナでの自動実行（推奨）
+### 1. 簡単な起動・管理（推奨）
 
-#### 起動
-
-```bash
-# コンテナをビルドして起動
-docker compose up -d --build
-```
-
-#### 停止
+`run_container.sh` スクリプトを使用してコンテナを簡単に管理できます：
 
 ```bash
-# コンテナを停止
-docker compose down
-```
+# コンテナ起動
+./run_container.sh
 
-#### ログ確認
+# または明示的に
+./run_container.sh start
 
-```bash
-# cronログを確認
-tail -f logs/cron.log
+# コンテナ停止
+./run_container.sh stop
 
-# コンテナログを確認
-docker compose logs -f
+# コンテナ再起動
+./run_container.sh restart
+
+# ログ表示（リアルタイム）
+./run_container.sh logs
+
+# RTSP接続テスト
+./run_container.sh test
+
+# ヘルプ表示
+./run_container.sh help
 ```
 
 **スケジュール**:
@@ -151,19 +155,26 @@ python run_daily.py
 - 土曜日の追加学習でモデルが更新される
 - 学習済みモデルは`models/padim_model.ckpt`に保存
 
-### カメラ設定
+### RTSP カメラ設定
 
-RTSP カメラの設定は環境変数で行います：
+RTSPカメラの設定は`.env`ファイルで行います：
 
 ```bash
-# .envファイルを作成してカメラ情報を設定
+# .envファイルの例（プロジェクトルートに作成）
 RTSP_USERNAME=admin
-RTSP_PASSWORD=password123
+RTSP_PASSWORD=your_password
 RTSP_IP=192.168.1.100
 RTSP_PORT=554
 ```
 
-現在はダミー画像を生成しています。実際のカメラを使用する場合は`main.py`の`capture_image`関数を修正してください。
+#### RTSP接続のテスト
+
+```bash
+# RTSP接続をテスト
+./run_container.sh test
+```
+
+**注意**: RTSPカメラが利用できない場合、システムは自動的にテスト用のダミー画像を生成して処理を継続します。
 
 ## ログ
 
@@ -197,12 +208,23 @@ RTSP_PORT=554
 
 ## トラブルシューティング
 
-### YOLO モデルが見つからない
+### YOLOモデルの自動ダウンロード
+
+初回実行時に`models/yolo11n.pt`が存在しない場合、自動的にダウンロードされます。手動でダウンロードする場合：
 
 ```bash
-# YOLOモデルをダウンロード
 mkdir -p models
-wget https://github.com/ultralytics/assets/releases/download/v8.2.0/yolo11n.pt -O models/yolo11n.pt
+# モデルは初回実行時に自動ダウンロードされます
+```
+
+### RTSP接続の問題
+
+```bash
+# RTSP接続をテスト
+./run_container.sh test
+
+# 詳細なテストの場合
+docker compose exec app python test_rtsp_simple.py
 ```
 
 ### PaDiM 学習がうまくいかない場合
@@ -210,13 +232,35 @@ wget https://github.com/ultralytics/assets/releases/download/v8.2.0/yolo11n.pt -
 - 学習用画像が少ない可能性があります
 - `images/no_person`と`images/grid_XX`に十分な画像が蓄積されてから追加学習を実行してください
 
+### ログの確認
+
+```bash
+# リアルタイムでログを確認
+./run_container.sh logs
+
+# または個別ファイルを確認
+tail -f logs/cron.log
+tail -f logs/main_$(date +%Y%m%d).log
+```
+
 ## 必要なライブラリ
 
 主要な依存関係：
 
-- `anomalib==2.0.0`: PaDiM 異常検知
-- `opencv-python`: 画像処理・カメラ操作
-- `ultralytics`: YOLO 物体検出（requirements.txt でコメントアウト済み）
+- `anomalib`: PaDiM 異常検知
+- `opencv-python`: 画像処理・RTSP接続
+- `ultralytics`: YOLO 物体検出
 - `torch`, `torchvision`: PyTorch バックエンド
+- `python-dotenv`: 環境変数読み込み
 
 詳細は`requirements.txt`を参照してください。
+
+## 主な特徴
+
+- **自動化**: cronによる完全自動運用
+- **RTSP対応**: ネットワークカメラからの映像取得
+- **フォールバック**: RTSP接続失敗時のダミー画像生成
+- **画像管理**: 自動的な古いファイルの削除（各フォルダ最大200枚）
+- **モデル自動ダウンロード**: YOLOモデルの自動取得
+- **簡単管理**: `run_container.sh`による統合管理
+- **テスト機能**: RTSP接続テスト機能内蔵

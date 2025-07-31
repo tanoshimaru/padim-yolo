@@ -216,8 +216,6 @@ class MainProcessor:
                 ip = os.getenv("RTSP_IP", "ip_address")
                 port = os.getenv("RTSP_PORT", "554")
                 
-                # デバッグ情報を追加
-                self.logger.info(f"環境変数確認 - USERNAME: {username}, IP: {ip}, PORT: {port}")
                 
                 rtsp_url = (
                     f"rtsp://{username}:{password}@{ip}:{port}/profile2/media.smp"
@@ -247,10 +245,8 @@ class MainProcessor:
             for attempt in range(3):  # 最大3回試行
                 ret, frame = cap.read()
                 if ret and frame is not None:
-                    self.logger.info(f"フレーム取得成功 (試行回数: {attempt + 1})")
                     break
                 else:
-                    self.logger.warning(f"フレーム取得失敗 (試行 {attempt + 1}/3)")
                     if attempt < 2:  # 最後の試行でなければ少し待機
                         import time
                         time.sleep(0.5)
