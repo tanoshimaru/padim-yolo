@@ -4,9 +4,27 @@ FROM ultralytics/ultralytics:latest-jetson-jetpack6
 # Set the working directory
 WORKDIR /app
 
-RUN uv pip install "setuptools<69" && \
-    uv pip install anomalib dotenv einops FrEIA kornia lightning open-clip-torch scikit-image tifffile timm && \
-    uv pip install -U setuptools
+# Install cron and required packages
+RUN apt-get update && apt-get install -y cron && \
+    rm -rf /var/lib/apt/lists/*
 
-# # Set the entry point
-# CMD ["python", "main.py"]
+RUN pip install "setuptools<69" && \
+    pip install anomalib dotenv einops FrEIA kornia lightning open-clip-torch scikit-image tifffile timm && \
+    pip install -U setuptools
+
+# Copy cron configuration
+COPY docker-crontab.txt /etc/cron.d/padim-yolo-cron
+
+# Set proper permissions for cron job
+RUN chmod 0644 /etc/cron.d/padim-yolo-cron && \
+    crontab /etc/cron.d/padim-yolo-cron
+
+# Create logs directory
+RUN mkdir -p /app/logs
+
+# Create startup script
+COPY docker-start.sh /app/docker-start.sh
+RUN chmod +x /app/docker-start.sh
+
+# Set the entry point to start cron and keep container running
+CMD ["/app/docker-start.sh"]

@@ -30,6 +30,10 @@ padim-yolo/
 ├── run_daily.py              # 日次実行スクリプト
 ├── person_detector.py        # YOLO人検出モジュール
 ├── image_manager.py          # 画像管理モジュール
+├── Dockerfile                # Dockerコンテナ設定
+├── docker-compose.yml        # Docker Compose設定
+├── docker-start.sh           # コンテナ起動スクリプト
+├── docker-crontab.txt        # コンテナ用cron設定
 ├── models/                   # YOLOモデル
 │   ├── yolo11n.pt
 │   └── yolo11n.onnx
@@ -42,7 +46,8 @@ padim-yolo/
 └── logs/                    # ログファイル
     ├── main_YYYYMMDD.log
     ├── train_additional_YYYYMMDD.log
-    └── results_YYYYMMDD.jsonl
+    ├── results_YYYYMMDD.jsonl
+    └── cron.log              # cronスケジュール実行ログ
 ```
 
 ## グリッド分割
@@ -77,37 +82,61 @@ grid_12  grid_13  grid_14  grid_15
 
 ## 実行方法
 
-### 1. 単発実行
+### 1. Docker コンテナでの自動実行（推奨）
 
-#### 平日処理
+#### 起動
 
 ```bash
-uv run --with opencv-python --with anomalib python main.py
+# コンテナをビルドして起動
+docker compose up -d --build
 ```
 
-#### 追加学習
+#### 停止
 
 ```bash
-uv run --with anomalib python train_additional.py
+# コンテナを停止
+docker compose down
 ```
 
-### 2. 日次自動実行
+#### ログ確認
 
 ```bash
+# cronログを確認
+tail -f logs/cron.log
+
+# コンテナログを確認
+docker compose logs -f
+```
+
+**スケジュール**:
+
+- **平日（月-金）8:00-17:00**: 30 秒間隔で自動実行
+- **土曜 9:00**: 追加学習を 1 回実行
+- **日曜**: 処理休止
+
+### 2. 単発実行
+
+#### コンテナ内で手動実行
+
+```bash
+# コンテナに入る
+docker compose exec app bash
+
+# 平日処理
+python main.py
+
+# 追加学習
+python train_additional.py
+```
+
+### 3. 日次自動実行（手動）
+
+```bash
+# コンテナ内で曜日判定による自動実行
 python run_daily.py
 ```
 
 自動的に曜日を判定して適切な処理を実行します。
-
-### 3. crontab でのスケジュール実行
-
-```bash
-# crontabを編集
-crontab -e
-
-# 毎日9:00に実行する例
-0 9 * * * cd /path/to/padim-yolo && python run_daily.py >> logs/cron.log 2>&1
-```
 
 ## 設定
 
@@ -124,6 +153,16 @@ crontab -e
 
 ### カメラ設定
 
+RTSP カメラの設定は環境変数で行います：
+
+```bash
+# .envファイルを作成してカメラ情報を設定
+RTSP_USERNAME=admin
+RTSP_PASSWORD=password123
+RTSP_IP=192.168.1.100
+RTSP_PORT=554
+```
+
 現在はダミー画像を生成しています。実際のカメラを使用する場合は`main.py`の`capture_image`関数を修正してください。
 
 ## ログ
@@ -132,6 +171,7 @@ crontab -e
 
 - `logs/main_YYYYMMDD.log`: 平日処理のログ
 - `logs/train_additional_YYYYMMDD.log`: 追加学習のログ
+- `logs/cron.log`: cron スケジュール実行ログ（Docker 使用時）
 
 ### 結果ログ
 
@@ -156,13 +196,6 @@ crontab -e
   ```
 
 ## トラブルシューティング
-
-### インポートエラー
-
-```bash
-# 必要なライブラリが不足している場合
-uv add opencv-python anomalib ultralytics
-```
 
 ### YOLO モデルが見つからない
 

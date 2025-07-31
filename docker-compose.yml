@@ -9,8 +9,10 @@ services:
       - RTSP_PASSWORD=${RTSP_PASSWORD:-password123}
       - RTSP_IP=${RTSP_IP:-192.168.1.100}
       - RTSP_PORT=${RTSP_PORT:-554}
+      - TZ=Asia/Tokyo  # タイムゾーン設定（cronの時刻を日本時間に）
     tty: true
     stdin_open: true
     volumes:
       - .:/app
     ipc: host
+    restart: unless-stopped  # コンテナの自動再起動

@@ -9,7 +9,7 @@
 
 import sys
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 
@@ -80,16 +80,7 @@ def main():
     if day_type == "weekday":
         # 平日: メイン処理
         print("\n📷 平日処理を実行します")
-        command = [
-            "uv",
-            "run",
-            "--with",
-            "opencv-python",
-            "--with",
-            "anomalib",
-            "python",
-            "main.py",
-        ]
+        command = ["python", "main.py"]
         success = run_command(command, "平日処理（撮影・YOLO検出・PaDiM異常検知）")
 
         if success:
@@ -102,7 +93,7 @@ def main():
     elif day_type == "saturday":
         # 土曜日: 追加学習
         print("\n🎓 土曜日処理（追加学習）を実行します")
-        command = ["uv", "run", "--with", "anomalib", "python", "train_additional.py"]
+        command = ["python", "train_additional.py"]
         success = run_command(command, "追加学習処理")
 
         if success:

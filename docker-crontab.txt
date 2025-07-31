@@ -1,0 +1,12 @@
+# PaDiM-YOLO 異常検知システム Docker cron設定
+# 
+# 平日（月-金）8:00-17:00の間、30秒間隔で実行
+# 毎分2回実行（0秒と30秒）で30秒間隔を実現
+*/1 8-17 * * 1-5 cd /app && python run_daily.py >> logs/cron.log 2>&1
+*/1 8-17 * * 1-5 sleep 30 && cd /app && python run_daily.py >> logs/cron.log 2>&1
+
+# 土曜日の朝9:00に1回実行（追加学習）
+0 9 * * 6 cd /app && python run_daily.py >> logs/cron.log 2>&1
+
+# ログローテーション（月1回、月初にログファイルを整理）
+0 2 1 * * find /app/logs -name "*.log" -mtime +30 -delete
