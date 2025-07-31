@@ -172,12 +172,23 @@ class MainProcessor:
         try:
             from ultralytics import YOLO
 
+            # デバッグ情報を追加
+            self.logger.info(f"現在の作業ディレクトリ: {os.getcwd()}")
+            self.logger.info(f"modelsディレクトリの存在確認: {os.path.exists('models')}")
+            if os.path.exists('models'):
+                models_files = os.listdir('models')
+                self.logger.info(f"modelsディレクトリ内のファイル: {models_files}")
+
             if os.path.exists("models/yolo11n.engine"):
+                self.logger.info("yolo11n.engineファイルを使用")
                 self.yolo_model = YOLO("models/yolo11n.engine", task="detect")
             elif os.path.exists("models/yolo11n.pt"):
+                self.logger.info("yolo11n.ptファイルを使用")
                 self.yolo_model = YOLO("models/yolo11n.pt")
             else:
                 self.logger.error("YOLOモデルファイルが見つかりません")
+                self.logger.error(f"yolo11n.engine存在確認: {os.path.exists('models/yolo11n.engine')}")
+                self.logger.error(f"yolo11n.pt存在確認: {os.path.exists('models/yolo11n.pt')}")
                 raise FileNotFoundError("YOLOモデルファイルが見つかりません")
 
             self.logger.info("YOLOモデルを読み込みました")

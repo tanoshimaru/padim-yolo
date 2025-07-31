@@ -38,9 +38,6 @@ class ImageManager:
         for i in range(16):
             directories.append(f"grid_{i:02d}")
 
-        # models ディレクトリも作成
-        directories.append("models")
-
         for dir_name in directories:
             dir_path = self.base_dir / dir_name
             dir_path.mkdir(exist_ok=True)
