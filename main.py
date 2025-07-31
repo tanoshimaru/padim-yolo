@@ -65,26 +65,39 @@ class PaDiMAnomalyDetector:
         try:
             if os.path.exists(self.model_path):
                 # 学習済みモデルがある場合
-                self.model = Padim.load_from_checkpoint(self.model_path)
-                self.model.eval()
-                logging.info(f"学習済みPaDiMモデルを読み込みました: {self.model_path}")
+                try:
+                    # 新しい形式（.save()で保存されたモデル）を試行
+                    self.model = Padim.load(self.model_path)
+                    self.model.eval()
+                    logging.info(f"学習済みPaDiMモデルを読み込みました（新形式）: {self.model_path}")
+                except Exception:
+                    try:
+                        # 古い形式（チェックポイント）を試行
+                        self.model = Padim.load_from_checkpoint(self.model_path)
+                        self.model.eval()
+                        logging.info(f"学習済みPaDiMモデルを読み込みました（チェックポイント）: {self.model_path}")
+                    except Exception as e:
+                        logging.warning(f"モデル読み込みに失敗、初期モデルを使用: {e}")
+                        self._create_initial_model()
             else:
-                pre_processor = Padim.configure_pre_processor(image_size=(256, 256))
-                self.model = Padim(
-                    backbone="resnet18",
-                    layers=["layer1", "layer2", "layer3"],
-                    pre_trained=True,
-                    pre_processor=pre_processor,
-                )
-                logging.warning(
-                    "学習済みモデルが見つかりません。初期モデルを使用します。"
-                )
+                logging.warning("学習済みモデルが見つかりません。初期モデルを使用します。")
+                self._create_initial_model()
 
             self.engine = Engine()
 
         except Exception as e:
             logging.error(f"PaDiMモデルの読み込みに失敗: {e}")
             raise
+
+    def _create_initial_model(self):
+        """初期モデルの作成"""
+        pre_processor = Padim.configure_pre_processor(image_size=(256, 256))
+        self.model = Padim(
+            backbone="resnet18",
+            layers=["layer1", "layer2", "layer3"],
+            pre_trained=True,
+            pre_processor=pre_processor,
+        )
 
     def predict(self, image_path: str) -> Dict[str, Any]:
         """異常検知の実行"""
