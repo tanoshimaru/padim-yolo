@@ -68,9 +68,6 @@ def detect_person_and_get_grid(
             model.export(format="engine", task="detect")
         model = YOLO("models/yolo11n.engine", task="detect")
 
-        else:
-            raise FileNotFoundError("YOLOモデルファイルが見つかりません")
-
     # 画像が存在するかチェック
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"画像ファイルが見つかりません: {image_path}")
