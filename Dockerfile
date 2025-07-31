@@ -5,6 +5,8 @@ FROM ultralytics/ultralytics:latest-jetson-jetpack6
 WORKDIR /app
 
 # Install cron and required packages, set timezone
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Tokyo
 RUN apt-get update && apt-get install -y cron tzdata && \
     rm -rf /var/lib/apt/lists/* && \
     ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime && \
