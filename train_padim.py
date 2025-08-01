@@ -83,45 +83,47 @@ def count_images_in_directory(directory: Path) -> int:
 def get_training_info(images_dir: str) -> tuple:
     """学習用データの情報を取得"""
     logger = logging.getLogger(__name__)
-    
+
     data_structure = check_data_structure(images_dir)
-    
+
     # 正常画像数をカウント
     total_normal_images = 0
-    
+
     # grid_XX ディレクトリから正常画像をカウント
     for grid_dir in data_structure["grid_dirs"]:
         image_count = count_images_in_directory(grid_dir)
         logger.info(f"{grid_dir.name}: {image_count} 画像")
         total_normal_images += image_count
-    
+
     # no_person ディレクトリから正常画像をカウント
     if data_structure["no_person_dir"]:
         no_person_count = count_images_in_directory(data_structure["no_person_dir"])
         logger.info(f"no_person: {no_person_count} 画像")
         total_normal_images += no_person_count
-    
+
     # test ディレクトリの画像数をカウント
     test_images = 0
     if data_structure["test_dir"]:
         test_images = count_images_in_directory(data_structure["test_dir"])
         logger.info(f"test: {test_images} 画像")
-    
+
     logger.info(f"学習用正常画像: {total_normal_images} 枚")
     logger.info(f"検証用画像: {test_images} 枚")
-    
+
     # 実際のディレクトリパスを返す
     normal_dirs = [str(d) for d in data_structure["grid_dirs"]]
     if data_structure["no_person_dir"]:
         normal_dirs.append(str(data_structure["no_person_dir"]))
-    
+
     test_dir = str(data_structure["test_dir"]) if data_structure["test_dir"] else None
-    
+
     return normal_dirs, test_dir, total_normal_images, test_images
 
 
 def create_padim_model(
-    image_size: tuple = (256, 256), backbone: str = "resnet18", layers: List[str] | None = None
+    image_size: tuple = (256, 256),
+    backbone: str = "resnet18",
+    layers: List[str] | None = None,
 ) -> Padim:
     """PaDiMモデルの作成"""
     if layers is None:
