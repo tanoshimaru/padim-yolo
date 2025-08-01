@@ -80,98 +80,44 @@ def count_images_in_directory(directory: Path) -> int:
     return count
 
 
-def prepare_training_structure(
-    images_dir: str, output_dir: str = "training_data"
-) -> tuple:
-    """学習用のディレクトリ構造を準備"""
+def get_training_info(images_dir: str) -> tuple:
+    """学習用データの情報を取得"""
     logger = logging.getLogger(__name__)
-
-    output_path = Path(output_dir)
-    normal_dir = output_path / "normal"
-    test_dir = output_path / "test"
-
-    # ディレクトリ作成
-    normal_dir.mkdir(parents=True, exist_ok=True)
-    test_dir.mkdir(parents=True, exist_ok=True)
-
+    
     data_structure = check_data_structure(images_dir)
-
-    # 正常画像を normal ディレクトリにシンボリックリンクで統合
+    
+    # 正常画像数をカウント
     total_normal_images = 0
-
-    # grid_XX ディレクトリから正常画像を統合
+    
+    # grid_XX ディレクトリから正常画像をカウント
     for grid_dir in data_structure["grid_dirs"]:
-        grid_name = grid_dir.name
         image_count = count_images_in_directory(grid_dir)
-        logger.info(f"{grid_name}: {image_count} 画像")
-
-        for image_file in grid_dir.iterdir():
-            if image_file.is_file() and image_file.suffix.lower() in {
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".bmp",
-                ".tiff",
-                ".tif",
-            }:
-                # ファイル名にグリッド名を追加してユニークにする
-                link_name = f"{grid_name}_{image_file.name}"
-                link_path = normal_dir / link_name
-
-                # シンボリックリンクを作成（既存の場合は削除してから作成）
-                if link_path.exists():
-                    link_path.unlink()
-                link_path.symlink_to(image_file.absolute())
-                total_normal_images += 1
-
-    # no_person ディレクトリから正常画像を統合
+        logger.info(f"{grid_dir.name}: {image_count} 画像")
+        total_normal_images += image_count
+    
+    # no_person ディレクトリから正常画像をカウント
     if data_structure["no_person_dir"]:
         no_person_count = count_images_in_directory(data_structure["no_person_dir"])
         logger.info(f"no_person: {no_person_count} 画像")
-
-        for image_file in data_structure["no_person_dir"].iterdir():
-            if image_file.is_file() and image_file.suffix.lower() in {
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".bmp",
-                ".tiff",
-                ".tif",
-            }:
-                link_name = f"no_person_{image_file.name}"
-                link_path = normal_dir / link_name
-
-                if link_path.exists():
-                    link_path.unlink()
-                link_path.symlink_to(image_file.absolute())
-                total_normal_images += 1
-
-    # test ディレクトリを検証データとして使用
+        total_normal_images += no_person_count
+    
+    # test ディレクトリの画像数をカウント
     test_images = 0
     if data_structure["test_dir"]:
-        test_count = count_images_in_directory(data_structure["test_dir"])
-        logger.info(f"test: {test_count} 画像")
-
-        for image_file in data_structure["test_dir"].iterdir():
-            if image_file.is_file() and image_file.suffix.lower() in {
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".bmp",
-                ".tiff",
-                ".tif",
-            }:
-                link_path = test_dir / image_file.name
-
-                if link_path.exists():
-                    link_path.unlink()
-                link_path.symlink_to(image_file.absolute())
-                test_images += 1
-
+        test_images = count_images_in_directory(data_structure["test_dir"])
+        logger.info(f"test: {test_images} 画像")
+    
     logger.info(f"学習用正常画像: {total_normal_images} 枚")
     logger.info(f"検証用画像: {test_images} 枚")
-
-    return str(normal_dir), str(test_dir), total_normal_images, test_images
+    
+    # 実際のディレクトリパスを返す
+    normal_dirs = [str(d) for d in data_structure["grid_dirs"]]
+    if data_structure["no_person_dir"]:
+        normal_dirs.append(str(data_structure["no_person_dir"]))
+    
+    test_dir = str(data_structure["test_dir"]) if data_structure["test_dir"] else None
+    
+    return normal_dirs, test_dir, total_normal_images, test_images
 
 
 def create_padim_model(
@@ -194,8 +140,7 @@ def create_padim_model(
 
 
 def train_padim_model(
-    normal_dir: str,
-    test_dir: str,
+    images_dir: str,
     model_save_path: str = "models/padim_model.ckpt",
     image_size: tuple = (256, 256),
     max_epochs: int = 100,
@@ -215,10 +160,11 @@ def train_padim_model(
     logger.info(f"ワーカー数: {num_workers}")
 
     # データモジュールの準備
-    # PaDiMは正常画像のみで学習するため、正常画像のみを指定
+    # 複数のディレクトリから正常画像を読み込む
+    # grid_XX, no_personを正常画像として統合して学習
     datamodule = Folder(
-        root="./",
-        normal_dir=normal_dir,
+        root=images_dir,
+        normal_dir=["grid_*", "no_person"],  # パターンマッチで複数ディレクトリを指定
         abnormal_dir=None,  # 異常画像は学習に使用しない
         image_size=image_size,
         train_batch_size=batch_size,
@@ -266,12 +212,6 @@ def main():
         type=str,
         default="images",
         help="画像データディレクトリのパス (default: images)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="training_data",
-        help="学習用データ準備の出力ディレクトリ (default: training_data)",
     )
     parser.add_argument(
         "--model-path",
@@ -355,20 +295,18 @@ def main():
 
         logger.info(f"合計正常画像数: {total_normal_images}")
 
-        # 学習用データ構造の準備
-        logger.info("学習用データ構造を準備します...")
-        normal_dir, test_dir, normal_count, test_count = prepare_training_structure(
-            args.images_dir, args.output_dir
+        # 学習用データの情報を取得
+        normal_dirs, test_dir, normal_count, test_count = get_training_info(
+            args.images_dir
         )
 
         if normal_count == 0:
-            logger.error("正常画像の準備に失敗しました")
+            logger.error("正常画像が見つかりません")
             return 1
 
         # モデル学習の実行
         train_padim_model(
-            normal_dir=normal_dir,
-            test_dir=test_dir,
+            images_dir=args.images_dir,
             model_save_path=args.model_path,
             image_size=tuple(args.image_size),
             max_epochs=args.max_epochs,
