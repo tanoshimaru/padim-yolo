@@ -175,7 +175,7 @@ def prepare_training_structure(
 
 
 def create_padim_model(
-    image_size: tuple = (256, 256), backbone: str = "resnet18", layers: List[str] = None
+    image_size: tuple = (256, 256), backbone: str = "resnet18", layers: List[str] | None = None
 ) -> Padim:
     """PaDiMモデルの作成"""
     if layers is None:
@@ -215,18 +215,15 @@ def train_padim_model(
     logger.info(f"ワーカー数: {num_workers}")
 
     # データモジュールの準備
-    # PaDiMは正常画像のみで学習するため、test_dirを使用せずtrainのみに集中
+    # PaDiMは正常画像のみで学習するため、正常画像のみを指定
     datamodule = Folder(
-        name="padim_training",
         root="./",
         normal_dir=normal_dir,
         abnormal_dir=None,  # 異常画像は学習に使用しない
-        task="segmentation",
         image_size=image_size,
         train_batch_size=batch_size,
         eval_batch_size=batch_size,
         num_workers=num_workers,
-        val_split_mode="from_test",  # 検証データがある場合はテストデータから分割
         val_split_ratio=0.2,  # 正常画像の20%を検証に使用
     )
 
