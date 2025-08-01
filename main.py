@@ -69,18 +69,24 @@ class PaDiMAnomalyDetector:
                     # 新しい形式（.save()で保存されたモデル）を試行
                     self.model = Padim.load(self.model_path)
                     self.model.eval()
-                    logging.info(f"学習済みPaDiMモデルを読み込みました（新形式）: {self.model_path}")
+                    logging.info(
+                        f"学習済みPaDiMモデルを読み込みました（新形式）: {self.model_path}"
+                    )
                 except Exception:
                     try:
                         # 古い形式（チェックポイント）を試行
                         self.model = Padim.load_from_checkpoint(self.model_path)
                         self.model.eval()
-                        logging.info(f"学習済みPaDiMモデルを読み込みました（チェックポイント）: {self.model_path}")
+                        logging.info(
+                            f"学習済みPaDiMモデルを読み込みました（チェックポイント）: {self.model_path}"
+                        )
                     except Exception as e:
                         logging.warning(f"モデル読み込みに失敗、初期モデルを使用: {e}")
                         self._create_initial_model()
             else:
-                logging.warning("学習済みモデルが見つかりません。初期モデルを使用します。")
+                logging.warning(
+                    "学習済みモデルが見つかりません。初期モデルを使用します。"
+                )
                 self._create_initial_model()
 
             self.engine = Engine()

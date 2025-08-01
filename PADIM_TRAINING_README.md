@@ -1,6 +1,6 @@
-# PaDiM学習スクリプトの使用方法
+# PaDiM 学習スクリプトの使用方法
 
-PaDiM異常検知モデルの学習用スクリプトを作成しました。以下の手順で学習を実行できます。
+PaDiM 異常検知モデルの学習用スクリプトを作成しました。以下の手順で学習を実行できます。
 
 ## 作成されたファイル
 
@@ -27,6 +27,7 @@ python prepare_training_data.py \
 ```
 
 **オプション説明:**
+
 - `--source_dir`: ソース画像ディレクトリ（デフォルト: `./images`）
 - `--target_dir`: 出力ディレクトリ（デフォルト: `./training_data`）
 - `--normal_ratio`: 学習用データの比率（デフォルト: 0.8）
@@ -34,7 +35,7 @@ python prepare_training_data.py \
 - `--clean`: 既存の出力ディレクトリをクリーン
 - `--random_seed`: ランダムシード（デフォルト: 42）
 
-### Step 2: PaDiMモデルの学習
+### Step 2: PaDiM モデルの学習
 
 ```bash
 # 基本的な学習
@@ -50,6 +51,7 @@ python train_padim.py \
 ```
 
 **オプション説明:**
+
 - `--data_root`: 学習データディレクトリ（デフォルト: `./training_data`）
 - `--normal_dir`: 正常画像ディレクトリ名（デフォルト: `normal`）
 - `--abnormal_dir`: 異常画像ディレクトリ名（デフォルト: `abnormal`）
@@ -96,7 +98,7 @@ python main.py
 
 - 学習ログ: `logs/train_padim_YYYYMMDD_HHMMSS.log`
 - データ準備ログ: `logs/prepare_training_data_YYYYMMDD_HHMMSS.log`
-- TensorBoardログ: `lightning_logs/`（学習中に自動生成）
+- TensorBoard ログ: `lightning_logs/`（学習中に自動生成）
 
 ```bash
 # TensorBoardでモニタリング
@@ -106,25 +108,28 @@ tensorboard --logdir lightning_logs
 ## 注意事項
 
 1. **メモリ使用量**: バッチサイズが大きいとメモリ不足になる場合があります
-2. **GPU使用**: 自動的にGPUが検出・使用されます
-3. **画像形式**: PNG、JPG形式をサポート
+2. **GPU 使用**: 自動的に GPU が検出・使用されます
+3. **画像形式**: PNG、JPG 形式をサポート
 4. **最小データ量**: 正常画像は最低でも数十枚以上推奨
 
 ## トラブルシューティング
 
 ### エラー: "CUDA out of memory"
+
 ```bash
 # バッチサイズを小さくして再実行
 python train_padim.py --batch_size 16
 ```
 
 ### エラー: "No normal images found"
+
 ```bash
 # データ準備スクリプトを再実行
 python prepare_training_data.py --clean
 ```
 
 ### 学習が進まない場合
+
 ```bash
 # エポック数を増やして再実行
 python train_padim.py --max_epochs 10
@@ -133,6 +138,7 @@ python train_padim.py --max_epochs 10
 ## 高度な使用方法
 
 ### カスタムデータセットで学習
+
 ```bash
 # 独自のデータセット構造で学習
 python train_padim.py \
@@ -142,12 +148,14 @@ python train_padim.py \
 ```
 
 ### 異なるバックボーンで学習
+
 ```bash
 # より強力なバックボーンを使用
 python train_padim.py --backbone resnet50 --batch_size 16
 ```
 
 ### 複数エポックで精度向上
+
 ```bash
 # より長時間学習して精度を向上
 python train_padim.py --max_epochs 20 --batch_size 16

@@ -21,7 +21,9 @@ def setup_logging():
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
 
-    log_filename = f"prepare_training_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    log_filename = (
+        f"prepare_training_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    )
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
@@ -61,7 +63,9 @@ class TrainingDataPreparer:
 
         try:
             if not self.source_dir.exists():
-                self.logger.error(f"ソースディレクトリが見つかりません: {self.source_dir}")
+                self.logger.error(
+                    f"ソースディレクトリが見つかりません: {self.source_dir}"
+                )
                 return [], []
 
             # grid_XX ディレクトリから正常画像を収集
@@ -74,7 +78,9 @@ class TrainingDataPreparer:
             # no_person ディレクトリから画像を収集
             no_person_dir = self.source_dir / "no_person"
             if no_person_dir.exists() and no_person_dir.is_dir():
-                images = list(no_person_dir.glob("*.png")) + list(no_person_dir.glob("*.jpg"))
+                images = list(no_person_dir.glob("*.png")) + list(
+                    no_person_dir.glob("*.jpg")
+                )
                 no_person_images.extend(images)
                 self.logger.info(f"no_person: {len(images)} 枚の画像を発見")
 
@@ -87,7 +93,9 @@ class TrainingDataPreparer:
             self.logger.error(f"画像収集でエラー: {e}")
             return [], []
 
-    def split_images(self, images: List[Path], ratio: float) -> Tuple[List[Path], List[Path]]:
+    def split_images(
+        self, images: List[Path], ratio: float
+    ) -> Tuple[List[Path], List[Path]]:
         """画像を指定比率で分割"""
         if not images:
             return [], []
@@ -110,13 +118,15 @@ class TrainingDataPreparer:
 
         for i, source_file in enumerate(source_files, 1):
             try:
-                target_file = target_dir / f"{source_file.stem}_{i:04d}{source_file.suffix}"
-                
+                target_file = (
+                    target_dir / f"{source_file.stem}_{i:04d}{source_file.suffix}"
+                )
+
                 if self.copy_mode:
                     shutil.copy2(source_file, target_file)
                 else:
                     shutil.move(str(source_file), target_file)
-                
+
                 success_count += 1
 
             except Exception as e:
@@ -138,15 +148,23 @@ class TrainingDataPreparer:
 
             # 正常画像を学習用と検証用に分割
             if normal_images:
-                train_normal, val_normal = self.split_images(normal_images, self.normal_ratio)
-                self.logger.info(f"正常画像分割: 学習用 {len(train_normal)} 枚, 検証用 {len(val_normal)} 枚")
+                train_normal, val_normal = self.split_images(
+                    normal_images, self.normal_ratio
+                )
+                self.logger.info(
+                    f"正常画像分割: 学習用 {len(train_normal)} 枚, 検証用 {len(val_normal)} 枚"
+                )
             else:
                 train_normal, val_normal = [], []
 
             # no_person画像を学習用と検証用に分割
             if no_person_images:
-                train_no_person, val_no_person = self.split_images(no_person_images, self.normal_ratio)
-                self.logger.info(f"no_person画像分割: 学習用 {len(train_no_person)} 枚, 検証用 {len(val_no_person)} 枚")
+                train_no_person, val_no_person = self.split_images(
+                    no_person_images, self.normal_ratio
+                )
+                self.logger.info(
+                    f"no_person画像分割: 学習用 {len(train_no_person)} 枚, 検証用 {len(val_no_person)} 枚"
+                )
             else:
                 train_no_person, val_no_person = [], []
 
@@ -180,7 +198,7 @@ class TrainingDataPreparer:
         info_content = f"""# PaDiM学習データセット情報
 
 ## 作成日時
-{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 ## データ統計
 - 学習用正常画像: {train_count} 枚
@@ -191,7 +209,7 @@ class TrainingDataPreparer:
 - ソースディレクトリ: {self.source_dir}
 - ターゲットディレクトリ: {self.target_dir}
 - 正常画像比率: {self.normal_ratio}
-- 操作モード: {'コピー' if self.copy_mode else '移動'}
+- 操作モード: {"コピー" if self.copy_mode else "移動"}
 - ランダムシード: {self.random_seed}
 
 ## 学習開始コマンド
@@ -268,12 +286,12 @@ def main():
             preparer.clean_target_directory()
 
         success = preparer.prepare_training_data()
-        
+
         if success:
             print(f"\n学習データの準備が完了しました: {args.target_dir}")
             print(f"\n次のコマンドで学習を開始できます:")
             print(f"python train_padim.py --data_root {args.target_dir}")
-        
+
         return 0 if success else 1
 
     except KeyboardInterrupt:
