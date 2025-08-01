@@ -162,18 +162,18 @@ def train_padim_model(
     logger.info(f"ワーカー数: {num_workers}")
 
     # データモジュールの準備
-    # 複数のディレクトリから正常画像を読み込む
-    # grid_XX, no_personを正常画像として統合して学習
+    # grid_XX, no_personを正常画像として使用
     datamodule = Folder(
         root=images_dir,
-        normal_dir=["grid_*", "no_person"],  # パターンマッチで複数ディレクトリを指定
-        abnormal_dir=None,  # 異常画像は学習に使用しない
-        image_size=image_size,
+        normal_dir="grid_00",  # まず単一ディレクトリで試す
         train_batch_size=batch_size,
         eval_batch_size=batch_size,
         num_workers=num_workers,
         val_split_ratio=0.2,  # 正常画像の20%を検証に使用
     )
+
+    # データモジュールをセットアップ
+    datamodule.setup()
 
     # モデルの準備
     model = create_padim_model(image_size=image_size)
