@@ -50,7 +50,7 @@ class PaDiMTrainer:
 
     def __init__(
         self,
-        data_root: str = "./training_data",
+        data_root: str = "./images/train",
         normal_dir: str = "normal",
         abnormal_dir: str = "abnormal",
         model_save_path: str = "./models/padim_model.ckpt",
@@ -261,17 +261,19 @@ class PaDiMTrainer:
         # README作成
         readme_content = """# PaDiM学習用データセット
 
+
 ## ディレクトリ構造
 ```
-training_data/
-├── normal/     # 正常画像（学習用）
-│   ├── normal_001.png
-│   ├── normal_002.png
-│   └── ...
-└── abnormal/   # 異常画像（検証・テスト用、オプション）
-    ├── abnormal_001.png
-    ├── abnormal_002.png
-    └── ...
+images/
+└── train/      # 学習用データ
+    ├── normal/     # 正常画像（学習用）
+    │   ├── normal_001.png
+    │   ├── normal_002.png
+    │   └── ...
+    └── abnormal/   # 異常画像（検証・テスト用、オプション）
+        ├── abnormal_001.png
+        ├── abnormal_002.png
+        └── ...
 ```
 
 ## 使用方法
@@ -301,8 +303,8 @@ def main():
     parser.add_argument(
         "--data_root",
         type=str,
-        default="./training_data",
-        help="学習データのルートディレクトリ (default: ./training_data)",
+        default="./images/train",
+        help="学習データのルートディレクトリ (default: ./images/train)",
     )
     parser.add_argument(
         "--normal_dir",

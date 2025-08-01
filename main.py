@@ -111,7 +111,6 @@ class PaDiMAnomalyDetector:
                 root="./",
                 normal_dir="./tmp_normal",
                 abnormal_dir="./tmp_abnormal",
-                task="classification",
             )
 
             # 一時ディレクトリ作成
