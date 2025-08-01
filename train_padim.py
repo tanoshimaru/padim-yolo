@@ -22,61 +22,36 @@ import pandas as pd
 
 import lightning.pytorch as pl
 from anomalib.models import Padim
-from lightning.pytorch import LightningDataModule
-from torch.utils.data import DataLoader
-
-try:
-    from anomalib.data.datasets.base.image import AnomalibDataset
-except ImportError:
-    from anomalib.data.datasets.base import AnomalibDataset
-try:
-    from anomalib.data.dataclasses import ImageBatch
-except ImportError:
-    # anomalib 2.0での代替
-    class ImageBatch:
-        @staticmethod
-        def collate(batch):
-            return batch
+from anomalib.data import Folder
+import shutil
 
 
-class MultiDirectoryDataset(AnomalibDataset):
-    """複数ディレクトリから画像を読み込むカスタムデータセット"""
+def create_unified_training_dir(
+    images_dir: str, training_dir: str = "temp_training_data"
+) -> tuple:
+    """全ての正常画像を統合した一時的な学習ディレクトリを作成"""
+    logger = logging.getLogger(__name__)
 
-    def __init__(self, images_dir: str, transform=None):
-        super().__init__(transform=transform)
-        self.images_dir = Path(images_dir)
-        self.samples = self._make_dataset()
+    training_path = Path(training_dir)
+    normal_dir = training_path / "normal"
 
-    def _make_dataset(self) -> pd.DataFrame:
-        """データセットのサンプルDataFrameを作成"""
-        samples_list = []
+    # ディレクトリを作成
+    normal_dir.mkdir(parents=True, exist_ok=True)
 
-        # grid_XX ディレクトリから正常画像を収集
-        for i in range(16):
-            grid_dir = self.images_dir / f"grid_{i:02d}"
-            if grid_dir.exists():
-                for img_file in grid_dir.iterdir():
-                    if img_file.is_file() and img_file.suffix.lower() in {
-                        ".jpg",
-                        ".jpeg",
-                        ".png",
-                        ".bmp",
-                        ".tiff",
-                        ".tif",
-                    }:
-                        samples_list.append(
-                            {
-                                "image_path": str(img_file),
-                                "label": "normal",
-                                "label_index": 0,
-                                "split": "train",
-                            }
-                        )
+    # 既存ファイルを削除
+    for file in normal_dir.glob("*"):
+        if file.is_file():
+            file.unlink()
 
-        # no_person ディレクトリから正常画像を収集
-        no_person_dir = self.images_dir / "no_person"
-        if no_person_dir.exists():
-            for img_file in no_person_dir.iterdir():
+    images_path = Path(images_dir)
+    total_images = 0
+
+    # grid_XX ディレクトリから画像をコピー
+    for i in range(16):
+        grid_dir = images_path / f"grid_{i:02d}"
+        if grid_dir.exists():
+            image_count = 0
+            for img_file in grid_dir.iterdir():
                 if img_file.is_file() and img_file.suffix.lower() in {
                     ".jpg",
                     ".jpeg",
@@ -85,93 +60,47 @@ class MultiDirectoryDataset(AnomalibDataset):
                     ".tiff",
                     ".tif",
                 }:
-                    samples_list.append(
-                        {
-                            "image_path": str(img_file),
-                            "label": "normal",
-                            "label_index": 0,
-                            "split": "train",
-                        }
-                    )
+                    dest_name = f"grid_{i:02d}_{img_file.name}"
+                    dest_path = normal_dir / dest_name
+                    shutil.copy2(img_file, dest_path)
+                    image_count += 1
+                    total_images += 1
+            if image_count > 0:
+                logger.info(f"grid_{i:02d}: {image_count} 画像をコピー")
 
-        # DataFrameを作成
-        samples = pd.DataFrame(samples_list)
-        if not samples.empty:
-            samples.attrs["task"] = "classification"
+    # no_person ディレクトリから画像をコピー
+    no_person_dir = images_path / "no_person"
+    if no_person_dir.exists():
+        image_count = 0
+        for img_file in no_person_dir.iterdir():
+            if img_file.is_file() and img_file.suffix.lower() in {
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".bmp",
+                ".tiff",
+                ".tif",
+            }:
+                dest_name = f"no_person_{img_file.name}"
+                dest_path = normal_dir / dest_name
+                shutil.copy2(img_file, dest_path)
+                image_count += 1
+                total_images += 1
+        if image_count > 0:
+            logger.info(f"no_person: {image_count} 画像をコピー")
 
-        return samples
+    logger.info(f"統合された学習用正常画像: {total_images} 枚")
+    return str(training_path), str(normal_dir), total_images
 
 
-class MultiDirectoryDataModule(LightningDataModule):
-    """複数ディレクトリ対応のデータモジュール"""
+def cleanup_training_dir(training_dir: str):
+    """学習用一時ディレクトリを削除"""
+    logger = logging.getLogger(__name__)
 
-    def __init__(
-        self,
-        images_dir: str,
-        train_batch_size: int = 32,
-        eval_batch_size: int = 32,
-        num_workers: int = 4,
-        val_split_ratio: float = 0.2,
-        transform=None,
-    ):
-        super().__init__()
-        self.images_dir = images_dir
-        self.train_batch_size = train_batch_size
-        self.eval_batch_size = eval_batch_size
-        self.num_workers = num_workers
-        self.val_split_ratio = val_split_ratio
-        self.transform = transform
-
-    def setup(self, stage: str | None = None):
-        """データセットのセットアップ"""
-        dataset = MultiDirectoryDataset(self.images_dir, transform=self.transform)
-
-        if len(dataset.samples) == 0:
-            raise ValueError("正常画像が見つかりません")
-
-        # 訓練/検証分割
-        total_samples = len(dataset.samples)
-        val_samples = int(total_samples * self.val_split_ratio)
-        train_samples = total_samples - val_samples
-
-        # 訓練用データセット
-        train_df = dataset.samples.iloc[:train_samples].copy()
-        train_df.attrs = dataset.samples.attrs
-        self.train_dataset = MultiDirectoryDataset.__new__(MultiDirectoryDataset)
-        self.train_dataset.__dict__.update(dataset.__dict__)
-        self.train_dataset.samples = train_df
-
-        # 検証用データセット
-        if val_samples > 0:
-            val_df = dataset.samples.iloc[train_samples:].copy()
-            val_df.attrs = dataset.samples.attrs
-            self.val_dataset = MultiDirectoryDataset.__new__(MultiDirectoryDataset)
-            self.val_dataset.__dict__.update(dataset.__dict__)
-            self.val_dataset.samples = val_df
-        else:
-            self.val_dataset = None
-
-    def train_dataloader(self) -> DataLoader:
-        """訓練用データローダー"""
-        return DataLoader(
-            dataset=self.train_dataset,
-            batch_size=self.train_batch_size,
-            shuffle=True,
-            num_workers=self.num_workers,
-            collate_fn=ImageBatch.collate,
-        )
-
-    def val_dataloader(self) -> DataLoader:
-        """検証用データローダー"""
-        if self.val_dataset is None:
-            return self.train_dataloader()
-        return DataLoader(
-            dataset=self.val_dataset,
-            batch_size=self.eval_batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            collate_fn=ImageBatch.collate,
-        )
+    training_path = Path(training_dir)
+    if training_path.exists():
+        shutil.rmtree(training_path)
+        logger.info(f"一時学習ディレクトリを削除しました: {training_dir}")
 
 
 def setup_logging() -> logging.Logger:
@@ -311,10 +240,28 @@ def train_padim_model(
     logger.info(f"バッチサイズ: {batch_size}")
     logger.info(f"ワーカー数: {num_workers}")
 
-    # カスタムデータモジュールを使用（ファイルコピー不要）
+    # 統合学習ディレクトリを作成
+    training_dir = "temp_training_data"
+
     try:
-        datamodule = MultiDirectoryDataModule(
-            images_dir=images_dir,
+        # 全画像を統合した一時ディレクトリを作成
+        training_root, normal_dir, total_images = create_unified_training_dir(
+            images_dir, training_dir
+        )
+
+        if total_images == 0:
+            logger.error("学習に使用できる正常画像が見つかりません")
+            logger.info("以下のディレクトリに画像を配置してください:")
+            logger.info("  - images/grid_00 〜 images/grid_15 (人が写っている正常画像)")
+            logger.info("  - images/no_person (人が写っていない正常画像)")
+            cleanup_training_dir(training_dir)
+            return
+
+        # Folderデータモジュールを使用
+        datamodule = Folder(
+            name="padim_training",
+            root=training_root,
+            normal_dir="normal",
             train_batch_size=batch_size,
             eval_batch_size=batch_size,
             num_workers=num_workers,
@@ -324,20 +271,10 @@ def train_padim_model(
         # データモジュールをセットアップ
         datamodule.setup()
 
-        # 画像数の確認とログ出力
-        total_images = len(datamodule.train_dataset.samples) + (
-            len(datamodule.val_dataset.samples) if datamodule.val_dataset else 0
-        )
-        logger.info(f"学習用正常画像: {len(datamodule.train_dataset.samples)} 枚")
-        if datamodule.val_dataset:
-            logger.info(f"検証用正常画像: {len(datamodule.val_dataset.samples)} 枚")
-        logger.info(f"合計: {total_images} 枚")
-
-    except ValueError as e:
+    except Exception as e:
         logger.error(f"データセットの準備に失敗: {e}")
-        logger.info("以下のディレクトリに画像を配置してください:")
-        logger.info("  - images/grid_00 〜 images/grid_15 (人が写っている正常画像)")
-        logger.info("  - images/no_person (人が写っていない正常画像)")
+        # エラー時も一時ディレクトリを削除
+        cleanup_training_dir(training_dir)
         return
 
     # モデルの準備
@@ -369,6 +306,9 @@ def train_padim_model(
     logger.info(f"モデル（.save()形式）を保存しました: {save_dir}")
 
     logger.info("学習が完了しました")
+
+    # 一時学習ディレクトリを削除
+    cleanup_training_dir(training_dir)
 
 
 def main():
