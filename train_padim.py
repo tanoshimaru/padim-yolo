@@ -164,6 +164,7 @@ def train_padim_model(
     # データモジュールの準備
     # grid_XX, no_personを正常画像として使用
     datamodule = Folder(
+        name="padim_training",
         root=images_dir,
         normal_dir="grid_00",  # まず単一ディレクトリで試す
         train_batch_size=batch_size,
