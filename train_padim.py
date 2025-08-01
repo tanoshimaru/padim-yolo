@@ -22,10 +22,21 @@ import pandas as pd
 
 import lightning.pytorch as pl
 from anomalib.models import Padim
-from anomalib.data.datasets.base import AnomalibDataset
-from anomalib.data.base import AnomalibDataModule
+from lightning.pytorch import LightningDataModule
 from torch.utils.data import DataLoader
-from anomalib.data.dataclasses import ImageBatch
+
+try:
+    from anomalib.data.datasets.base.image import AnomalibDataset
+except ImportError:
+    from anomalib.data.datasets.base import AnomalibDataset
+try:
+    from anomalib.data.dataclasses import ImageBatch
+except ImportError:
+    # anomalib 2.0での代替
+    class ImageBatch:
+        @staticmethod
+        def collate(batch):
+            return batch
 
 
 class MultiDirectoryDataset(AnomalibDataset):
@@ -91,7 +102,7 @@ class MultiDirectoryDataset(AnomalibDataset):
         return samples
 
 
-class MultiDirectoryDataModule(AnomalibDataModule):
+class MultiDirectoryDataModule(LightningDataModule):
     """複数ディレクトリ対応のデータモジュール"""
 
     def __init__(
