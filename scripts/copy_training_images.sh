@@ -15,7 +15,9 @@ total_images=0
 # grid_XX ディレクトリから画像をコピー
 for i in {00..15}; do
     grid_dir="${IMAGES_DIR}/grid_${i}"
+    echo "DEBUG: Checking directory: $grid_dir" >&2
     if [ -d "$grid_dir" ]; then
+        echo "DEBUG: Directory exists: $grid_dir" >&2
         image_count=0
         for img in "$grid_dir"/*.{jpg,jpeg,png,bmp,tiff,tif}; do
             if [ -f "$img" ]; then
