@@ -48,24 +48,64 @@ class AdditionalTrainer:
         self.models_dir.mkdir(exist_ok=True)
 
     def prepare_training_data(self) -> str:
-        """学習用データの準備
+        """学習用データの準備（シェルスクリプト使用）
 
         Returns:
             str: 学習用データディレクトリのパス
         """
+        import subprocess
+
         # 学習用データディレクトリを作成
+        train_data_dir = Path("tmp/train_data")
+
+        # シェルスクリプトで高速コピーを実行
+        script_path = (
+            Path(__file__).parent / "scripts" / "prepare_additional_training.sh"
+        )
+        try:
+            result = subprocess.run(
+                [
+                    str(script_path),
+                    "images",  # 画像ディレクトリ
+                    str(train_data_dir),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            # 出力をログに記録
+            output_lines = result.stdout.strip().split("\n")
+            for line in output_lines[:-1]:  # 最後の行以外を出力
+                self.logger.info(line)
+
+            # 最後の行からコピー数を取得
+            copied_count = int(output_lines[-1]) if output_lines else 0
+
+            if copied_count == 0:
+                self.logger.warning("学習用画像が見つかりません")
+
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"シェルスクリプト実行エラー: {e.stderr}")
+            # フォールバック: 従来の方法
+            return self._prepare_training_data_fallback()
+        except (ValueError, IndexError):
+            self.logger.error("シェルスクリプトからの出力解析エラー")
+            return self._prepare_training_data_fallback()
+
+        return str(train_data_dir)
+
+    def _prepare_training_data_fallback(self) -> str:
+        """フォールバック：従来の方法で学習用データを準備"""
         train_data_dir = Path("tmp/train_data")
         train_data_dir.mkdir(parents=True, exist_ok=True)
 
-        # normal ディレクトリを作成
         normal_dir = train_data_dir / "normal"
         normal_dir.mkdir(exist_ok=True)
 
-        # abnormal ディレクトリを作成（空でも必要）
         abnormal_dir = train_data_dir / "abnormal"
         abnormal_dir.mkdir(exist_ok=True)
 
-        # 学習用画像をコピー
         training_images = self.image_manager.get_training_images()
 
         if not training_images:
@@ -80,7 +120,6 @@ class AdditionalTrainer:
             if not os.path.exists(image_path):
                 continue
 
-            # ファイル名を連番に
             target_path = normal_dir / f"{i:06d}.png"
 
             try:
@@ -91,7 +130,9 @@ class AdditionalTrainer:
                     f"画像コピーエラー: {image_path} -> {target_path}, {e}"
                 )
 
-        self.logger.info(f"学習用画像を準備: {copied_count}枚 -> {normal_dir}")
+        self.logger.info(
+            f"学習用画像を準備（フォールバック）: {copied_count}枚 -> {normal_dir}"
+        )
         return str(train_data_dir)
 
     def create_model(self) -> Padim:

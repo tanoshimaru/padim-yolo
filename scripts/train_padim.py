@@ -20,7 +20,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 import argparse
-import pandas as pd
 
 import lightning.pytorch as pl
 from anomalib.models import Padim
@@ -32,7 +31,9 @@ import torch
 def create_unified_training_dir(
     images_dir: str, training_dir: str = "temp_training_data"
 ) -> tuple:
-    """全ての正常画像を統合した一時的な学習ディレクトリを作成"""
+    """全ての正常画像を統合した一時的な学習ディレクトリを作成（シェルスクリプト使用）"""
+    import subprocess
+
     logger = logging.getLogger(__name__)
 
     training_path = Path(training_dir)
@@ -48,84 +49,77 @@ def create_unified_training_dir(
             and f.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
         ]
 
-        # ソースディレクトリの画像数を確認
+        # ソースディレクトリの画像数を確認（高速化）
         source_count = 0
         images_path = Path(images_dir)
         for i in range(16):
             grid_dir = images_path / f"grid_{i:02d}"
             if grid_dir.exists():
-                source_count += len([f for f in grid_dir.iterdir() if f.is_file() and f.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}])
-        
+                source_count += len(
+                    [
+                        f
+                        for f in grid_dir.iterdir()
+                        if f.is_file()
+                        and f.suffix.lower()
+                        in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+                    ]
+                )
+
         no_person_dir = images_path / "no_person"
         if no_person_dir.exists():
-            source_count += len([f for f in no_person_dir.iterdir() if f.is_file() and f.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}])
+            source_count += len(
+                [
+                    f
+                    for f in no_person_dir.iterdir()
+                    if f.is_file()
+                    and f.suffix.lower()
+                    in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+                ]
+            )
 
         # 既存ディレクトリの画像数がソースと一致し、十分な数がある場合のみ再利用
-        if len(existing_image_files) >= 10 and len(existing_image_files) == source_count:
+        if (
+            len(existing_image_files) >= 10
+            and len(existing_image_files) == source_count
+        ):
             logger.info(
                 f"既存のtemp_training_dataディレクトリを再利用します: {len(existing_image_files)} 画像"
             )
             return str(training_path), str(normal_dir), len(existing_image_files)
         else:
-            logger.info(f"既存: {len(existing_image_files)}枚, ソース: {source_count}枚 - ディレクトリを再作成します")
-
-    # ディレクトリを作成
-    normal_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(
+                f"既存: {len(existing_image_files)}枚, ソース: {source_count}枚 - ディレクトリを再作成します"
+            )
 
     # 既存ファイルを削除（再利用しない場合のみ）
-    for file in normal_dir.glob("*"):
-        if file.is_file():
-            file.unlink()
+    if normal_dir.exists():
+        for file in normal_dir.glob("*"):
+            if file.is_file():
+                file.unlink()
 
-    images_path = Path(images_dir)
-    total_images = 0
+    # シェルスクリプトで高速コピーを実行
+    script_path = Path(__file__).parent / "copy_training_images.sh"
+    try:
+        result = subprocess.run(
+            [str(script_path), images_dir, training_dir],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
 
-    # grid_XX ディレクトリから画像をコピー（空のディレクトリはスキップ）
-    for i in range(16):
-        grid_dir = images_path / f"grid_{i:02d}"
-        if grid_dir.exists():
-            image_count = 0
-            for img_file in grid_dir.iterdir():
-                if img_file.is_file() and img_file.suffix.lower() in {
-                    ".jpg",
-                    ".jpeg",
-                    ".png",
-                    ".bmp",
-                    ".tiff",
-                    ".tif",
-                }:
-                    dest_name = f"grid_{i:02d}_{img_file.name}"
-                    dest_path = normal_dir / dest_name
-                    shutil.copy2(img_file, dest_path)
-                    image_count += 1
-                    total_images += 1
-            if image_count > 0:
-                logger.info(f"grid_{i:02d}: {image_count} 画像をコピー")
-            else:
-                logger.info(f"grid_{i:02d}: 画像が見つからないためスキップ")
+        # 最後の行から画像数を取得
+        output_lines = result.stdout.strip().split("\n")
+        for line in output_lines[:-1]:  # 最後の行以外を出力
+            logger.info(line)
 
-    # no_person ディレクトリから画像をコピー（空のディレクトリはスキップ）
-    no_person_dir = images_path / "no_person"
-    if no_person_dir.exists():
-        image_count = 0
-        for img_file in no_person_dir.iterdir():
-            if img_file.is_file() and img_file.suffix.lower() in {
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".bmp",
-                ".tiff",
-                ".tif",
-            }:
-                dest_name = f"no_person_{img_file.name}"
-                dest_path = normal_dir / dest_name
-                shutil.copy2(img_file, dest_path)
-                image_count += 1
-                total_images += 1
-        if image_count > 0:
-            logger.info(f"no_person: {image_count} 画像をコピー")
-        else:
-            logger.info("no_person: 画像が見つからないためスキップ")
+        total_images = int(output_lines[-1]) if output_lines else 0
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"シェルスクリプト実行エラー: {e.stderr}")
+        return str(training_path), str(normal_dir), 0
+    except (ValueError, IndexError):
+        logger.error("シェルスクリプトからの出力解析エラー")
+        return str(training_path), str(normal_dir), 0
 
     logger.info(f"統合された学習用正常画像: {total_images} 枚")
     return str(training_path), str(normal_dir), total_images
@@ -302,9 +296,11 @@ def train_padim_model(
             logger.info("  - images/no_person (人が写っていない正常画像)")
             cleanup_training_dir(training_dir)
             return
-        
+
         if total_images < 10:
-            logger.error(f"学習には最低10枚の画像が必要ですが、{total_images}枚しかありません")
+            logger.error(
+                f"学習には最低10枚の画像が必要ですが、{total_images}枚しかありません"
+            )
             cleanup_training_dir(training_dir)
             return
 
@@ -322,20 +318,26 @@ def train_padim_model(
         logger.info("Folderデータモジュールを作成しました (num_workers=0で安定性向上)")
 
         # 実際のファイル数を先に確認
-        actual_files = len([f for f in (Path(training_root) / "normal").iterdir() if f.is_file()])
+        actual_files = len(
+            [f for f in (Path(training_root) / "normal").iterdir() if f.is_file()]
+        )
         logger.info(f"temp_training_data/normal内の実際のファイル数: {actual_files}")
 
         # データモジュールをセットアップ
         logger.info("データモジュールをセットアップ中...")
         datamodule.setup()
         logger.info("データモジュールのセットアップが完了しました")
-        
+
         # デバッグ: 実際にデータが読み込まれているか確認
         try:
             train_loader = datamodule.train_dataloader()
             val_loader = datamodule.val_dataloader()
-            logger.info(f"学習データセットサイズ: {len(train_loader) if train_loader else 0}")
-            logger.info(f"検証データセットサイズ: {len(val_loader) if val_loader else 0}")
+            logger.info(
+                f"学習データセットサイズ: {len(train_loader) if train_loader else 0}"
+            )
+            logger.info(
+                f"検証データセットサイズ: {len(val_loader) if val_loader else 0}"
+            )
         except Exception as debug_e:
             logger.error(f"データローダー作成でエラー: {debug_e}")
             raise
@@ -347,7 +349,7 @@ def train_padim_model(
         return
 
     # PyTorchのテンソル精度設定（Tensor Coresの警告対応）
-    torch.set_float32_matmul_precision('medium')
+    torch.set_float32_matmul_precision("medium")
     logger.info("PyTorchのfloat32行列乗算精度をmediumに設定しました")
 
     # モデルの準備
@@ -511,7 +513,9 @@ def main():
         # --force-recreateオプションが指定された場合は既存ディレクトリを削除
         if args.force_recreate and Path("temp_training_data").exists():
             cleanup_training_dir("temp_training_data")
-            logger.info("--force-recreateオプションにより、既存のtemp_training_dataディレクトリを削除しました")
+            logger.info(
+                "--force-recreateオプションにより、既存のtemp_training_dataディレクトリを削除しました"
+            )
 
         # モデル学習の実行
         train_padim_model(

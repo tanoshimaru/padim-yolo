@@ -6,7 +6,6 @@ images/ ディレクトリ内の画像を training_data/ に分散配置し、
 PaDiMの学習データセットを準備します。
 """
 
-import os
 import sys
 import shutil
 import logging
@@ -135,59 +134,51 @@ class TrainingDataPreparer:
         return success_count
 
     def prepare_training_data(self) -> bool:
-        """学習データを準備"""
+        """学習データを準備（シェルスクリプト使用）"""
+        import subprocess
+
         try:
-            self.logger.info("=== 学習データ準備開始 ===")
+            self.logger.info("=== 学習データ準備開始（高速化） ===")
 
-            # 画像収集
-            normal_images, no_person_images = self.collect_images()
+            # シェルスクリプトで高速処理を実行
+            script_path = Path(__file__).parent / "prepare_data.sh"
+            try:
+                result = subprocess.run(
+                    [
+                        str(script_path),
+                        str(self.source_dir),
+                        str(self.target_dir),
+                        str(self.normal_ratio),
+                        "true" if self.copy_mode else "false",
+                        str(self.random_seed),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
 
-            if not normal_images and not no_person_images:
-                self.logger.error("学習用画像が見つかりません")
+                # 出力をログに記録
+                output_lines = result.stdout.strip().split("\n")
+                for line in output_lines[:-1]:  # 最後の行以外を出力
+                    self.logger.info(line)
+
+                # 最後の行から統計情報を取得
+                stats_line = output_lines[-1]
+                if "|" in stats_line:
+                    train_count, val_count = map(int, stats_line.split("|"))
+
+                    # データセット情報ファイル作成
+                    self.create_dataset_info(train_count, val_count)
+
+                    self.logger.info("=== 学習データ準備完了 ===")
+                    return True
+                else:
+                    self.logger.error("シェルスクリプトからの統計情報取得エラー")
+                    return False
+
+            except subprocess.CalledProcessError as e:
+                self.logger.error(f"シェルスクリプト実行エラー: {e.stderr}")
                 return False
-
-            # 正常画像を学習用と検証用に分割
-            if normal_images:
-                train_normal, val_normal = self.split_images(
-                    normal_images, self.normal_ratio
-                )
-                self.logger.info(
-                    f"正常画像分割: 学習用 {len(train_normal)} 枚, 検証用 {len(val_normal)} 枚"
-                )
-            else:
-                train_normal, val_normal = [], []
-
-            # no_person画像を学習用と検証用に分割
-            if no_person_images:
-                train_no_person, val_no_person = self.split_images(
-                    no_person_images, self.normal_ratio
-                )
-                self.logger.info(
-                    f"no_person画像分割: 学習用 {len(train_no_person)} 枚, 検証用 {len(val_no_person)} 枚"
-                )
-            else:
-                train_no_person, val_no_person = [], []
-
-            # 正常画像（学習用）
-            normal_dir = self.target_dir / "normal"
-            total_train_normal = train_normal + train_no_person
-            if total_train_normal:
-                count = self.copy_or_move_files(total_train_normal, normal_dir)
-                self.logger.info(f"正常画像（学習用）: {count} 枚を配置")
-
-            # 異常画像（検証用）- 必要に応じて
-            # 今回は検証用画像も正常として扱う
-            abnormal_dir = self.target_dir / "abnormal"
-            total_val = val_normal + val_no_person
-            if total_val:
-                count = self.copy_or_move_files(total_val, abnormal_dir)
-                self.logger.info(f"検証用画像: {count} 枚を配置")
-
-            # データセット情報ファイル作成
-            self.create_dataset_info(len(total_train_normal), len(total_val))
-
-            self.logger.info("=== 学習データ準備完了 ===")
-            return True
 
         except Exception as e:
             self.logger.error(f"学習データ準備でエラー: {e}")
@@ -289,7 +280,7 @@ def main():
 
         if success:
             print(f"\n学習データの準備が完了しました: {args.target_dir}")
-            print(f"\n次のコマンドで学習を開始できます:")
+            print("\n次のコマンドで学習を開始できます:")
             print(f"python train_padim.py --data_root {args.target_dir}")
 
         return 0 if success else 1
