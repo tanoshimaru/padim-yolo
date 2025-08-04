@@ -29,7 +29,7 @@ import torch
 
 
 def create_unified_training_dir(
-    images_dir: str, training_dir: str = "temp_training_data"
+    images_dir: str, training_dir: str = "temp_training_data", image_size: tuple = (224, 224)
 ) -> tuple:
     """全ての正常画像を統合した一時的な学習ディレクトリを作成（シェルスクリプト使用）"""
     import subprocess
@@ -97,11 +97,12 @@ def create_unified_training_dir(
             if file.is_file():
                 file.unlink()
 
-    # シェルスクリプトで高速コピーを実行
-    script_path = Path(__file__).parent / "copy_training_images.sh"
+    # シェルスクリプトで高速リサイズ&コピーを実行
+    script_path = Path(__file__).parent / "copy_training_images_resized.sh"
+    target_size = f"{image_size[0]}x{image_size[1]}"  # 224x224形式
     try:
         result = subprocess.run(
-            [str(script_path), images_dir, training_dir],
+            [str(script_path), images_dir, training_dir, target_size],
             capture_output=True,
             text=True,
             check=True,
@@ -287,7 +288,7 @@ def train_padim_model(
     try:
         # 全画像を統合した一時ディレクトリを作成（既存の場合は再利用）
         training_root, _, total_images = create_unified_training_dir(
-            images_dir, training_dir
+            images_dir, training_dir, image_size
         )
 
         if total_images == 0:
@@ -324,7 +325,7 @@ def train_padim_model(
         # vstackエラー回避のため、非常に小さなバッチサイズを使用
         adjusted_batch_size = min(8, max(1, total_images // 50))  # 最低1、最大8、全データの1/50
         logger.info(
-            f"調整後バッチサイズ: {adjusted_batch_size} (元画像640x480→{image_size}にリサイズ, データ量: {total_images})"
+            f"調整後バッチサイズ: {adjusted_batch_size} (元画像640x480→{image_size}にリサイズ済み, データ量: {total_images})"
         )
 
         datamodule = Folder(
@@ -340,7 +341,7 @@ def train_padim_model(
         logger.info(
             f"Folderデータモジュールを作成しました (num_workers={optimal_workers})"
         )
-        logger.info(f"画像リサイズは PaDiM pre_processor で自動実行されます: {image_size}")
+        logger.info(f"画像は既に{image_size}にリサイズ済みです")
 
         # 実際のファイル数を先に確認
         actual_files = len(
@@ -431,30 +432,9 @@ def train_padim_model(
     logger.info(f"PaDiMモデルを作成中（画像サイズ: {image_size}）")
     model = create_padim_model(image_size=image_size)
     
-    # データモジュールとモデルの統合アプローチ
-    logger.info("PaDiMモデルとデータモジュールを統合中...")
-    try:
-        # Anomalibの標準的な方法でプリプロセッサを設定
-        if hasattr(datamodule, 'transform'):
-            datamodule.transform = model.pre_processor
-        if hasattr(datamodule, 'train_transform'):
-            datamodule.train_transform = model.pre_processor
-        if hasattr(datamodule, 'eval_transform'):
-            datamodule.eval_transform = model.pre_processor
-        if hasattr(datamodule, 'val_transform'):
-            datamodule.val_transform = model.pre_processor
-        if hasattr(datamodule, 'test_transform'):
-            datamodule.test_transform = model.pre_processor
-            
-        logger.info("利用可能な全てのtransformにプリプロセッサを設定しました")
-        
-        # データモジュールを再セットアップ
-        datamodule.setup()
-        logger.info("データモジュール再セットアップ完了")
-        
-    except Exception as e:
-        logger.warning(f"プリプロセッサ設定中にエラー: {e}")
-        logger.info("デフォルト設定で続行します")
+    # 画像は既にリサイズ済みのため、シンプルな正規化のみ適用
+    logger.info("既にリサイズ済みの画像のため、標準的な前処理のみ適用...")
+    logger.info("PaDiMモデルのpre_processorを使用してImageNet正規化を適用")
 
     # カスタムロガーとコールバックの設定
     try:
@@ -721,8 +701,8 @@ def main():
 
         logger.info(f"合計正常画像数: {total_normal_images}")
 
-        # 学習用データの情報を取得
-        _, _, normal_count, _ = get_training_info(args.images_dir)
+        # 学習用データの情報を取得（ログ重複回避のため簡略化）
+        normal_count = total_normal_images
 
         if normal_count == 0:
             logger.error("正常画像が見つかりません")
