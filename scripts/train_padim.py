@@ -394,8 +394,8 @@ def train_padim_model(
         if "ImageBatch" in str(e) or "subscriptable" in str(e):
             logger.info("データローダーテストエラーを無視して学習を続行します")
         else:
-            # その他のエラーは一時ディレクトリを削除して終了
-            cleanup_training_dir(training_dir)
+            # その他のエラーでも一時ディレクトリは保持（デバッグのため）
+            logger.info(f"一時学習ディレクトリを保持します（デバッグ用）: {training_dir}")
             return
 
     # PyTorchのテンソル精度設定（Tensor Coresの警告対応）
