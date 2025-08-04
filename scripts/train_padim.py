@@ -305,11 +305,27 @@ def train_padim_model(
             return
 
         # Folderデータモジュールを使用（学習は正常画像のみ）
-        # num_workersを0にして安定性を向上させる
+        # 環境に応じたワーカー数とバッチサイズを設定
+        import os
+
+        cpu_count = os.cpu_count() or 1
+        optimal_workers = min(4, max(0, cpu_count - 1))  # CPU数-1、最大4
+
+        # Dockerやコンテナ環境では安定性のためワーカー数を制限
+        if os.path.exists("/.dockerenv") or os.environ.get("CONTAINER"):
+            optimal_workers = 0
+            logger.info("Docker/コンテナ環境を検出 - num_workers=0に設定")
+        else:
+            logger.info(f"CPU数: {cpu_count}, 使用ワーカー数: {optimal_workers}")
+
         # データ量に応じたバッチサイズの調整
-        adjusted_batch_size = min(batch_size, max(1, total_images // 10))  # 最低1、最大でも全データの1/10
-        logger.info(f"バッチサイズを調整: {batch_size} -> {adjusted_batch_size} (データ量: {total_images})")
-        
+        adjusted_batch_size = min(
+            batch_size, max(1, total_images // 10)
+        )  # 最低1、最大でも全データの1/10
+        logger.info(
+            f"バッチサイズを調整: {batch_size} -> {adjusted_batch_size} (データ量: {total_images})"
+        )
+
         datamodule = Folder(
             name="padim_training",
             root=training_root,
@@ -317,13 +333,12 @@ def train_padim_model(
             abnormal_dir="normal",  # 異常検知では異常データは不要、normalを指定
             train_batch_size=adjusted_batch_size,
             eval_batch_size=adjusted_batch_size,
-            num_workers=0,  # マルチプロセシングを無効化して安定性向上
+            num_workers=optimal_workers,  # 環境に応じて最適化
             val_split_ratio=0.2,  # 正常画像の20%を検証に使用
-            image_size=(image_size[0], image_size[1]),  # 画像サイズを明示的に指定
-            transform_config_train=None,  # デフォルトの変換を使用
-            transform_config_eval=None,   # デフォルトの変換を使用
         )
-        logger.info("Folderデータモジュールを作成しました (num_workers=0で安定性向上)")
+        logger.info(
+            f"Folderデータモジュールを作成しました (num_workers={optimal_workers})"
+        )
 
         # 実際のファイル数を先に確認
         actual_files = len(
@@ -340,27 +355,29 @@ def train_padim_model(
         try:
             train_loader = datamodule.train_dataloader()
             val_loader = datamodule.val_dataloader()
-            
+
             train_size = len(train_loader) if train_loader else 0
             val_size = len(val_loader) if val_loader else 0
-            
+
             logger.info(f"学習データセットサイズ: {train_size} バッチ")
             logger.info(f"検証データセットサイズ: {val_size} バッチ")
-            
+
             # データローダーが空でないことを確認
             if train_size == 0:
                 logger.error("学習データローダーが空です")
                 raise ValueError("学習データローダーが空のため、学習を実行できません")
-            
+
             # 最初のバッチを試験的に読み込んで検証
             try:
                 first_batch = next(iter(train_loader))
-                logger.info(f"最初のバッチサイズ: {first_batch['image'].shape if 'image' in first_batch else 'unknown'}")
+                logger.info(
+                    f"最初のバッチサイズ: {first_batch['image'].shape if 'image' in first_batch else 'unknown'}"
+                )
                 logger.info("データローダーの動作確認完了")
             except Exception as batch_e:
                 logger.error(f"バッチ読み込みテストでエラー: {batch_e}")
                 raise
-                
+
         except Exception as debug_e:
             logger.error(f"データローダー作成でエラー: {debug_e}")
             raise
@@ -379,19 +396,30 @@ def train_padim_model(
     model = create_padim_model(image_size=image_size)
 
     # カスタムロガーとコールバックの設定
-    from lightning.pytorch.loggers import TensorBoardLogger
-    from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, ProgressBar
-    
+    try:
+        from lightning.pytorch.loggers import TensorBoardLogger
+        from lightning.pytorch.callbacks import (
+            ModelCheckpoint,
+            EarlyStopping,
+            ProgressBar,
+        )
+    except ImportError:
+        # fallback for older versions
+        from pytorch_lightning.loggers import TensorBoardLogger
+        from pytorch_lightning.callbacks import (
+            ModelCheckpoint,
+            EarlyStopping,
+            ProgressBar,
+        )
+
     # TensorBoardロガー
     tb_logger = TensorBoardLogger(
-        save_dir="lightning_logs",
-        name="padim_training",
-        version=None
+        save_dir="lightning_logs", name="padim_training", version=None
     )
-    
+
     # プログレスバーコールバック
     progress_bar = ProgressBar(refresh_rate=1)
-    
+
     # モデルチェックポイントコールバック
     checkpoint_callback = ModelCheckpoint(
         dirpath="lightning_logs/checkpoints",
@@ -400,17 +428,14 @@ def train_padim_model(
         monitor="val_loss",
         mode="min",
         save_last=True,
-        verbose=True
+        verbose=True,
     )
-    
+
     # 早期停止コールバック
     early_stop_callback = EarlyStopping(
-        monitor="val_loss",
-        patience=10,
-        mode="min",
-        verbose=True
+        monitor="val_loss", patience=10, mode="min", verbose=True
     )
-    
+
     # Trainerの準備（詳細ログ設定）
     trainer = pl.Trainer(
         max_epochs=max_epochs,
@@ -425,7 +450,7 @@ def train_padim_model(
         enable_model_summary=True,
         profiler="simple",  # シンプルプロファイラーを有効化
     )
-    
+
     # トレーナー情報をログ出力
     logger.info("=" * 30)
     logger.info("Trainerの設定")
@@ -442,14 +467,20 @@ def train_padim_model(
     logger.info("PaDiMモデル学習開始")
     logger.info("=" * 50)
     logger.info(f"学習開始時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(f"使用デバイス: {trainer.device_ids if hasattr(trainer, 'device_ids') else 'auto'}")
+    logger.info(
+        f"使用デバイス: {trainer.device_ids if hasattr(trainer, 'device_ids') else 'auto'}"
+    )
     logger.info(f"アクセラレータ: {trainer.accelerator}")
-    logger.info(f"学習データ量: {len(train_loader) if 'train_loader' in locals() else 'unknown'} バッチ")
-    logger.info(f"検証データ量: {len(val_loader) if 'val_loader' in locals() else 'unknown'} バッチ")
+    logger.info(
+        f"学習データ量: {len(train_loader) if 'train_loader' in locals() else 'unknown'} バッチ"
+    )
+    logger.info(
+        f"検証データ量: {len(val_loader) if 'val_loader' in locals() else 'unknown'} バッチ"
+    )
     logger.info(f"モデルバックボーン: resnet18")
     logger.info(f"特徴抽出レイヤー: ['layer1', 'layer2', 'layer3']")
     logger.info("=" * 50)
-    
+
     # 学習実行（詳細ログ付き）
     try:
         trainer.fit(model=model, datamodule=datamodule)
@@ -469,28 +500,30 @@ def train_padim_model(
     logger.info("モデル保存開始")
     logger.info("=" * 30)
     logger.info(f"保存パス: {model_save_path}")
-    
+
     try:
         trainer.save_checkpoint(model_save_path)
         model_size = Path(model_save_path).stat().st_size / (1024 * 1024)  # MB
         logger.info(f"チェックポイント保存完了: {model_size:.2f} MB")
-        
+
         # 追加で.save()形式でも保存
         save_dir = Path(model_save_path).parent / "padim_saved_model"
         save_dir.mkdir(exist_ok=True)
         model.model.save(str(save_dir))
         logger.info(f"モデル（.save()形式）を保存しました: {save_dir}")
-        
+
         # 保存されたファイルの詳細情報
         if Path(model_save_path).exists():
             stat = Path(model_save_path).stat()
-            logger.info(f"モデルファイルサイズ: {stat.st_size / (1024*1024):.2f} MB")
-            logger.info(f"保存日時: {datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')}")
-        
+            logger.info(f"モデルファイルサイズ: {stat.st_size / (1024 * 1024):.2f} MB")
+            logger.info(
+                f"保存日時: {datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+
         logger.info("=" * 30)
         logger.info("モデル保存完了")
         logger.info("=" * 30)
-        
+
     except Exception as e:
         logger.error("=" * 30)
         logger.error("モデル保存エラー")
