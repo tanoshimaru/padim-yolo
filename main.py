@@ -97,7 +97,7 @@ class PaDiMAnomalyDetector:
 
     def _create_initial_model(self):
         """初期モデルの作成"""
-        pre_processor = Padim.configure_pre_processor(image_size=(256, 256))
+        pre_processor = Padim.configure_pre_processor(image_size=(224, 224))
         self.model = Padim(
             backbone="resnet18",
             layers=["layer1", "layer2", "layer3"],

@@ -240,7 +240,7 @@ def get_training_info(images_dir: str) -> tuple:
 
 
 def create_padim_model(
-    image_size: tuple = (256, 256),  # リサイズ後のサイズ（処理効率のため）
+    image_size: tuple = (224, 224),  # ResNet標準サイズ（最適な処理効率）
     backbone: str = "resnet18",
     layers: List[str] | None = None,
 ) -> Padim:
@@ -263,7 +263,7 @@ def create_padim_model(
 def train_padim_model(
     images_dir: str,
     model_save_path: str = "models/padim_model.ckpt",
-    image_size: tuple = (256, 256),  # リサイズ後のサイズ（処理効率のため）
+    image_size: tuple = (224, 224),  # ResNet標準サイズ（最適な処理効率）
     max_epochs: int = 100,
     batch_size: int = 32,
     num_workers: int = 4,
@@ -275,7 +275,7 @@ def train_padim_model(
     Path(model_save_path).parent.mkdir(parents=True, exist_ok=True)
 
     logger.info("PaDiMモデルの学習を開始します")
-    logger.info(f"元画像サイズ: 640x480 (カメラ解像度)")
+    logger.info("元画像サイズ: 640x480 (カメラ解像度)")
     logger.info(f"リサイズ後サイズ: {image_size} (処理効率のため)")
     logger.info(f"最大エポック数: {max_epochs}")
     logger.info(f"バッチサイズ: {batch_size}")
@@ -323,7 +323,7 @@ def train_padim_model(
         # 元画像(640x480)は自動でリサイズされるため、メモリ効率は良好
         adjusted_batch_size = min(batch_size, max(1, total_images // 10))  # 最低1、最大でも全データの1/10
         logger.info(
-            f"バッチサイズ: {adjusted_batch_size} (元画像640x480→{image_size}にリサイズ, データ量: {total_images})"
+            f"調整後バッチサイズ: {adjusted_batch_size} (元画像640x480→{image_size}にリサイズ, データ量: {total_images})"
         )
 
         datamodule = Folder(
@@ -370,9 +370,14 @@ def train_padim_model(
             # 最初のバッチを試験的に読み込んで検証
             try:
                 first_batch = next(iter(train_loader))
-                logger.info(
-                    f"最初のバッチサイズ: {first_batch['image'].shape if 'image' in first_batch else 'unknown'}"
-                )
+                if hasattr(first_batch, 'keys') and 'image' in first_batch:
+                    batch_shape = first_batch['image'].shape
+                    logger.info(f"最初のバッチサイズ: {batch_shape}")
+                elif hasattr(first_batch, '__len__') and len(first_batch) > 0:
+                    batch_shape = first_batch[0].shape if hasattr(first_batch[0], 'shape') else 'tensor found'
+                    logger.info(f"最初のバッチサイズ: {batch_shape}")
+                else:
+                    logger.info("最初のバッチ: データ構造を確認中...")
                 logger.info("データローダーの動作確認完了")
             except Exception as batch_e:
                 logger.error(f"バッチ読み込みテストでエラー: {batch_e}")
@@ -418,7 +423,13 @@ def train_padim_model(
     )
 
     # プログレスバーコールバック
-    progress_bar = ProgressBar(refresh_rate=1)
+    try:
+        progress_bar = ProgressBar(refresh_rate=1)  # 古いバージョン用
+    except TypeError:
+        try:
+            progress_bar = ProgressBar(refresh_rate_per_second=1)  # 新しいバージョン用
+        except TypeError:
+            progress_bar = ProgressBar()  # 引数なしで作成
 
     # モデルチェックポイントコールバック
     checkpoint_callback = ModelCheckpoint(
@@ -558,8 +569,8 @@ def main():
         "--image-size",
         type=int,
         nargs=2,
-        default=[256, 256],
-        help="リサイズ後の画像サイズ (width height) (default: 256 256)",
+        default=[224, 224],
+        help="リサイズ後の画像サイズ (width height) (default: 224 224)",
     )
     parser.add_argument(
         "--max-epochs", type=int, default=100, help="最大エポック数 (default: 100)"
