@@ -593,6 +593,9 @@ def main():
 
         if data_structure["test_dir"]:
             # testディレクトリ内のサブディレクトリごとに画像数を表示
+            test_normal_count = 0
+            test_anomaly_count = 0
+            
             if data_structure["test_normal_dir"]:
                 test_normal_count = count_images_in_directory(
                     data_structure["test_normal_dir"]
@@ -605,8 +608,8 @@ def main():
                 )
                 logger.info(f"test/anomaly: {test_anomaly_count} 画像")
 
-            # 全体のtest画像数も表示
-            test_count = count_images_in_directory(data_structure["test_dir"])
+            # 全体のtest画像数を計算（サブディレクトリの合計）
+            test_count = test_normal_count + test_anomaly_count
             logger.info(f"test (合計): {test_count} 画像")
         else:
             logger.warning("testディレクトリが見つかりません")
