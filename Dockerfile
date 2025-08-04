@@ -23,13 +23,13 @@ RUN chown -R $USERNAME:$USERNAME /app
 # Install cron and required packages, set timezone
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Tokyo
-RUN apt-get update && apt-get install -y cron tzdata && \
+RUN apt-get update && apt-get install -y cron imagemagick tzdata && \
     rm -rf /var/lib/apt/lists/* && \
     ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime && \
     echo "Asia/Tokyo" > /etc/timezone
 
 RUN pip install "setuptools<69" && \
-    pip install anomalib dotenv einops FrEIA imagemagick kornia lightning onnxslim open-clip-torch scikit-image tifffile timm && \
+    pip install anomalib dotenv einops FrEIA kornia lightning onnxslim open-clip-torch scikit-image tifffile timm && \
     pip install -U setuptools
 
 # # Copy cron configuration
