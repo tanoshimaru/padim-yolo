@@ -240,7 +240,7 @@ def get_training_info(images_dir: str) -> tuple:
 
 
 def create_padim_model(
-    image_size: tuple = (640, 480),  # 実際の画像サイズに合わせて変更
+    image_size: tuple = (256, 256),  # リサイズ後のサイズ（処理効率のため）
     backbone: str = "resnet18",
     layers: List[str] | None = None,
 ) -> Padim:
@@ -263,7 +263,7 @@ def create_padim_model(
 def train_padim_model(
     images_dir: str,
     model_save_path: str = "models/padim_model.ckpt",
-    image_size: tuple = (640, 480),  # 実際の画像サイズに合わせて変更
+    image_size: tuple = (256, 256),  # リサイズ後のサイズ（処理効率のため）
     max_epochs: int = 100,
     batch_size: int = 32,
     num_workers: int = 4,
@@ -275,7 +275,8 @@ def train_padim_model(
     Path(model_save_path).parent.mkdir(parents=True, exist_ok=True)
 
     logger.info("PaDiMモデルの学習を開始します")
-    logger.info(f"画像サイズ: {image_size}")
+    logger.info(f"元画像サイズ: 640x480 (カメラ解像度)")
+    logger.info(f"リサイズ後サイズ: {image_size} (処理効率のため)")
     logger.info(f"最大エポック数: {max_epochs}")
     logger.info(f"バッチサイズ: {batch_size}")
     logger.info(f"ワーカー数: {num_workers}")
@@ -318,15 +319,11 @@ def train_padim_model(
         else:
             logger.info(f"CPU数: {cpu_count}, 使用ワーカー数: {optimal_workers}")
 
-        # 高解像度画像（640x480）によるメモリ使用量を考慮してバッチサイズを調整
-        # 640x480は256x256の約6.25倍のピクセル数なので、バッチサイズを削減
-        memory_factor = (image_size[0] * image_size[1]) / (256 * 256)  # メモリ使用量の倍率
-        memory_adjusted_batch = max(1, int(batch_size / memory_factor))
-        adjusted_batch_size = min(
-            memory_adjusted_batch, max(1, total_images // 10)
-        )  # 最低1、最大でも全データの1/10
+        # データ量に応じたバッチサイズの調整
+        # 元画像(640x480)は自動でリサイズされるため、メモリ効率は良好
+        adjusted_batch_size = min(batch_size, max(1, total_images // 10))  # 最低1、最大でも全データの1/10
         logger.info(
-            f"バッチサイズを調整: {batch_size} -> {adjusted_batch_size} (メモリ倍率: {memory_factor:.1f}x, データ量: {total_images})"
+            f"バッチサイズ: {adjusted_batch_size} (元画像640x480→{image_size}にリサイズ, データ量: {total_images})"
         )
 
         datamodule = Folder(
@@ -561,8 +558,8 @@ def main():
         "--image-size",
         type=int,
         nargs=2,
-        default=[640, 480],
-        help="画像サイズ (width height) (default: 640 480)",
+        default=[256, 256],
+        help="リサイズ後の画像サイズ (width height) (default: 256 256)",
     )
     parser.add_argument(
         "--max-epochs", type=int, default=100, help="最大エポック数 (default: 100)"
