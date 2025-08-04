@@ -115,7 +115,7 @@ class AdditionalTrainer:
 
     def _create_new_model(self) -> Padim:
         """新規PaDiMモデルの作成"""
-        pre_processor = Padim.configure_pre_processor(image_size=(256, 256))
+        pre_processor = Padim.configure_pre_processor(image_size=(640, 480))
         return Padim(
             backbone="resnet18",
             layers=["layer1", "layer2", "layer3"],
@@ -141,9 +141,9 @@ class AdditionalTrainer:
                 root=data_dir,
                 normal_dir="normal",
                 abnormal_dir="abnormal",
-                image_size=[256, 256],
-                train_batch_size=32,
-                eval_batch_size=32,
+                image_size=[640, 480],
+                train_batch_size=8,  # 高解像度のためバッチサイズを削減
+                eval_batch_size=8,
                 num_workers=0,
             )
 

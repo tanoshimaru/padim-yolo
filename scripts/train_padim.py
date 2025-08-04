@@ -240,7 +240,7 @@ def get_training_info(images_dir: str) -> tuple:
 
 
 def create_padim_model(
-    image_size: tuple = (256, 256),
+    image_size: tuple = (640, 480),  # 実際の画像サイズに合わせて変更
     backbone: str = "resnet18",
     layers: List[str] | None = None,
 ) -> Padim:
@@ -263,7 +263,7 @@ def create_padim_model(
 def train_padim_model(
     images_dir: str,
     model_save_path: str = "models/padim_model.ckpt",
-    image_size: tuple = (256, 256),
+    image_size: tuple = (640, 480),  # 実際の画像サイズに合わせて変更
     max_epochs: int = 100,
     batch_size: int = 32,
     num_workers: int = 4,
@@ -318,12 +318,15 @@ def train_padim_model(
         else:
             logger.info(f"CPU数: {cpu_count}, 使用ワーカー数: {optimal_workers}")
 
-        # データ量に応じたバッチサイズの調整
+        # 高解像度画像（640x480）によるメモリ使用量を考慮してバッチサイズを調整
+        # 640x480は256x256の約6.25倍のピクセル数なので、バッチサイズを削減
+        memory_factor = (image_size[0] * image_size[1]) / (256 * 256)  # メモリ使用量の倍率
+        memory_adjusted_batch = max(1, int(batch_size / memory_factor))
         adjusted_batch_size = min(
-            batch_size, max(1, total_images // 10)
+            memory_adjusted_batch, max(1, total_images // 10)
         )  # 最低1、最大でも全データの1/10
         logger.info(
-            f"バッチサイズを調整: {batch_size} -> {adjusted_batch_size} (データ量: {total_images})"
+            f"バッチサイズを調整: {batch_size} -> {adjusted_batch_size} (メモリ倍率: {memory_factor:.1f}x, データ量: {total_images})"
         )
 
         datamodule = Folder(
@@ -558,8 +561,8 @@ def main():
         "--image-size",
         type=int,
         nargs=2,
-        default=[256, 256],
-        help="画像サイズ (width height) (default: 256 256)",
+        default=[640, 480],
+        help="画像サイズ (width height) (default: 640 480)",
     )
     parser.add_argument(
         "--max-epochs", type=int, default=100, help="最大エポック数 (default: 100)"
