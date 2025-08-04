@@ -32,12 +32,12 @@ RUN pip install "setuptools<69" && \
     pip install anomalib dotenv einops FrEIA kornia lightning onnxslim open-clip-torch scikit-image tifffile timm && \
     pip install -U setuptools
 
-# Copy cron configuration
-COPY docker-crontab.txt /etc/cron.d/padim-yolo-cron
+# # Copy cron configuration
+# COPY docker-crontab.txt /etc/cron.d/padim-yolo-cron
 
-# Set proper permissions for cron job
-RUN chmod 0644 /etc/cron.d/padim-yolo-cron && \
-    crontab /etc/cron.d/padim-yolo-cron
+# # Set proper permissions for cron job
+# RUN chmod 0644 /etc/cron.d/padim-yolo-cron && \
+#     crontab /etc/cron.d/padim-yolo-cron
 
 # Create logs directory
 RUN mkdir -p /app/logs
