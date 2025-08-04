@@ -332,7 +332,6 @@ def train_padim_model(
             root=training_root,
             normal_dir="normal",
             abnormal_dir="normal",  # 異常検知では異常データは不要、normalを指定
-            image_size=list(image_size),  # タプルをリストに変換
             train_batch_size=adjusted_batch_size,
             eval_batch_size=adjusted_batch_size,
             num_workers=optimal_workers,  # 環境に応じて最適化
@@ -341,6 +340,7 @@ def train_padim_model(
         logger.info(
             f"Folderデータモジュールを作成しました (num_workers={optimal_workers})"
         )
+        logger.info(f"画像リサイズは PaDiM pre_processor で自動実行されます: {image_size}")
 
         # 実際のファイル数を先に確認
         actual_files = len(
@@ -380,7 +380,6 @@ def train_padim_model(
                     root=training_root,
                     normal_dir="normal",
                     abnormal_dir="normal",
-                    image_size=list(image_size),
                     train_batch_size=1,
                     eval_batch_size=1,
                     num_workers=optimal_workers,
