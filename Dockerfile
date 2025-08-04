@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y cron tzdata && \
     echo "Asia/Tokyo" > /etc/timezone
 
 RUN pip install "setuptools<69" && \
-    pip install anomalib dotenv einops FrEIA kornia lightning onnxslim open-clip-torch scikit-image tifffile timm && \
+    pip install anomalib dotenv einops FrEIA imagemagick kornia lightning onnxslim open-clip-torch scikit-image tifffile timm && \
     pip install -U setuptools
 
 # # Copy cron configuration
