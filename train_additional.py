@@ -12,7 +12,6 @@ import sys
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import List
 
 from anomalib.models import Padim
 from anomalib.engine import Engine
@@ -87,52 +86,11 @@ class AdditionalTrainer:
 
         except subprocess.CalledProcessError as e:
             self.logger.error(f"シェルスクリプト実行エラー: {e.stderr}")
-            # フォールバック: 従来の方法
-            return self._prepare_training_data_fallback()
-        except (ValueError, IndexError):
-            self.logger.error("シェルスクリプトからの出力解析エラー")
-            return self._prepare_training_data_fallback()
+            raise RuntimeError(f"学習データ準備に失敗しました: {e.stderr}")
+        except (ValueError, IndexError) as e:
+            self.logger.error(f"シェルスクリプトからの出力解析エラー: {e}")
+            raise RuntimeError(f"シェルスクリプト出力の解析に失敗しました: {e}")
 
-        return str(train_data_dir)
-
-    def _prepare_training_data_fallback(self) -> str:
-        """フォールバック：従来の方法で学習用データを準備"""
-        train_data_dir = Path("tmp/train_data")
-        train_data_dir.mkdir(parents=True, exist_ok=True)
-
-        normal_dir = train_data_dir / "normal"
-        normal_dir.mkdir(exist_ok=True)
-
-        abnormal_dir = train_data_dir / "abnormal"
-        abnormal_dir.mkdir(exist_ok=True)
-
-        training_images = self.image_manager.get_training_images()
-
-        if not training_images:
-            self.logger.warning("学習用画像が見つかりません")
-            return str(train_data_dir)
-
-        import shutil
-
-        copied_count = 0
-
-        for i, image_path in enumerate(training_images):
-            if not os.path.exists(image_path):
-                continue
-
-            target_path = normal_dir / f"{i:06d}.png"
-
-            try:
-                shutil.copy2(image_path, target_path)
-                copied_count += 1
-            except Exception as e:
-                self.logger.error(
-                    f"画像コピーエラー: {image_path} -> {target_path}, {e}"
-                )
-
-        self.logger.info(
-            f"学習用画像を準備（フォールバック）: {copied_count}枚 -> {normal_dir}"
-        )
         return str(train_data_dir)
 
     def create_model(self) -> Padim:

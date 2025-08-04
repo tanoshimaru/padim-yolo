@@ -7,12 +7,9 @@ PaDiMの学習データセットを準備します。
 """
 
 import sys
-import shutil
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple
-import random
 
 
 def setup_logging():
@@ -52,86 +49,6 @@ class TrainingDataPreparer:
         self.copy_mode = copy_mode  # True: コピー, False: 移動
         self.random_seed = random_seed
 
-        # ランダムシード設定
-        random.seed(random_seed)
-
-    def collect_images(self) -> Tuple[List[Path], List[Path]]:
-        """画像ファイルを収集"""
-        normal_images = []
-        no_person_images = []
-
-        try:
-            if not self.source_dir.exists():
-                self.logger.error(
-                    f"ソースディレクトリが見つかりません: {self.source_dir}"
-                )
-                return [], []
-
-            # grid_XX ディレクトリから正常画像を収集
-            for grid_dir in self.source_dir.glob("grid_*"):
-                if grid_dir.is_dir():
-                    images = list(grid_dir.glob("*.png")) + list(grid_dir.glob("*.jpg"))
-                    normal_images.extend(images)
-                    self.logger.info(f"{grid_dir.name}: {len(images)} 枚の画像を発見")
-
-            # no_person ディレクトリから画像を収集
-            no_person_dir = self.source_dir / "no_person"
-            if no_person_dir.exists() and no_person_dir.is_dir():
-                images = list(no_person_dir.glob("*.png")) + list(
-                    no_person_dir.glob("*.jpg")
-                )
-                no_person_images.extend(images)
-                self.logger.info(f"no_person: {len(images)} 枚の画像を発見")
-
-            self.logger.info(f"総正常画像数: {len(normal_images)}")
-            self.logger.info(f"総no_person画像数: {len(no_person_images)}")
-
-            return normal_images, no_person_images
-
-        except Exception as e:
-            self.logger.error(f"画像収集でエラー: {e}")
-            return [], []
-
-    def split_images(
-        self, images: List[Path], ratio: float
-    ) -> Tuple[List[Path], List[Path]]:
-        """画像を指定比率で分割"""
-        if not images:
-            return [], []
-
-        # シャッフル
-        shuffled_images = images.copy()
-        random.shuffle(shuffled_images)
-
-        # 分割
-        split_point = int(len(shuffled_images) * ratio)
-        first_part = shuffled_images[:split_point]
-        second_part = shuffled_images[split_point:]
-
-        return first_part, second_part
-
-    def copy_or_move_files(self, source_files: List[Path], target_dir: Path) -> int:
-        """ファイルをコピーまたは移動"""
-        target_dir.mkdir(parents=True, exist_ok=True)
-        success_count = 0
-
-        for i, source_file in enumerate(source_files, 1):
-            try:
-                target_file = (
-                    target_dir / f"{source_file.stem}_{i:04d}{source_file.suffix}"
-                )
-
-                if self.copy_mode:
-                    shutil.copy2(source_file, target_file)
-                else:
-                    shutil.move(str(source_file), target_file)
-
-                success_count += 1
-
-            except Exception as e:
-                self.logger.error(f"ファイル操作エラー ({source_file}): {e}")
-
-        return success_count
 
     def prepare_training_data(self) -> bool:
         """学習データを準備（シェルスクリプト使用）"""
@@ -178,11 +95,11 @@ class TrainingDataPreparer:
 
             except subprocess.CalledProcessError as e:
                 self.logger.error(f"シェルスクリプト実行エラー: {e.stderr}")
-                return False
+                raise RuntimeError(f"学習データ準備に失敗しました: {e.stderr}")
 
         except Exception as e:
             self.logger.error(f"学習データ準備でエラー: {e}")
-            return False
+            raise
 
     def create_dataset_info(self, train_count: int, val_count: int):
         """データセット情報ファイルを作成"""
@@ -217,6 +134,7 @@ python train_padim.py --data_root {self.target_dir}
 
     def clean_target_directory(self):
         """ターゲットディレクトリをクリーン"""
+        import shutil
         if self.target_dir.exists():
             self.logger.info(f"既存のターゲットディレクトリを削除: {self.target_dir}")
             shutil.rmtree(self.target_dir)
