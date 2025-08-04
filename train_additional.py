@@ -202,24 +202,61 @@ class AdditionalTrainer:
             )
 
             # 学習実行
-            self.logger.info("学習開始...")
-            engine.fit(model=model, datamodule=datamodule)
+            self.logger.info("=" * 50)
+            self.logger.info("PaDiM追加学習開始")
+            self.logger.info("=" * 50)
+            self.logger.info(f"学習開始時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            self.logger.info(f"エポック数: {engine.max_epochs}")
+            self.logger.info(f"バッチサイズ: 32")
+            self.logger.info(f"データディレクトリ: {data_dir}")
+            self.logger.info("=" * 50)
+            
+            try:
+                engine.fit(model=model, datamodule=datamodule)
+                self.logger.info("=" * 50)
+                self.logger.info("追加学習が正常に完了しました")
+                self.logger.info(f"学習完了時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                self.logger.info("=" * 50)
+            except Exception as e:
+                self.logger.error("=" * 50)
+                self.logger.error("追加学習中にエラーが発生しました")
+                self.logger.error(f"エラー詳細: {e}")
+                self.logger.error("=" * 50)
+                raise
 
             # モデル保存
+            self.logger.info("=" * 30)
+            self.logger.info("追加学習モデル保存開始")
+            self.logger.info("=" * 30)
+            
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             model_save_path = self.models_dir / f"padim_model_{timestamp}.ckpt"
             latest_model_path = self.models_dir / "padim_model.ckpt"
+            
+            try:
+                # チェックポイント保存
+                engine.trainer.save_checkpoint(str(model_save_path))
+                model_size = model_save_path.stat().st_size / (1024 * 1024)  # MB
+                self.logger.info(f"タイムスタンプ付きモデル保存完了: {model_size:.2f} MB")
 
-            # チェックポイント保存
-            engine.trainer.save_checkpoint(str(model_save_path))
-
-            # 最新モデルとしてもコピー
-            import shutil
-
-            shutil.copy2(str(model_save_path), str(latest_model_path))
-
-            self.logger.info(f"学習完了。モデルを保存: {model_save_path}")
-            self.logger.info(f"最新モデル: {latest_model_path}")
+                # 最新モデルとしてもコピー
+                import shutil
+                shutil.copy2(str(model_save_path), str(latest_model_path))
+                
+                self.logger.info(f"学習完了。モデルを保存: {model_save_path}")
+                self.logger.info(f"最新モデルとして更新: {latest_model_path}")
+                self.logger.info(f"保存日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                self.logger.info("=" * 30)
+                self.logger.info("追加学習モデル保存完了")
+                self.logger.info("=" * 30)
+                
+            except Exception as e:
+                self.logger.error("=" * 30)
+                self.logger.error("追加学習モデル保存エラー")
+                self.logger.error(f"エラー詳細: {e}")
+                self.logger.error("=" * 30)
+                raise
 
             return True
 

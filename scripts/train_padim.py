@@ -355,32 +355,127 @@ def train_padim_model(
     # モデルの準備
     model = create_padim_model(image_size=image_size)
 
-    # Trainerの準備
+    # カスタムロガーとコールバックの設定
+    from lightning.pytorch.loggers import TensorBoardLogger
+    from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, ProgressBar
+    
+    # TensorBoardロガー
+    tb_logger = TensorBoardLogger(
+        save_dir="lightning_logs",
+        name="padim_training",
+        version=None
+    )
+    
+    # プログレスバーコールバック
+    progress_bar = ProgressBar(refresh_rate=1)
+    
+    # モデルチェックポイントコールバック
+    checkpoint_callback = ModelCheckpoint(
+        dirpath="lightning_logs/checkpoints",
+        filename="padim-{epoch:02d}-{val_loss:.2f}",
+        save_top_k=3,
+        monitor="val_loss",
+        mode="min",
+        save_last=True,
+        verbose=True
+    )
+    
+    # 早期停止コールバック
+    early_stop_callback = EarlyStopping(
+        monitor="val_loss",
+        patience=10,
+        mode="min",
+        verbose=True
+    )
+    
+    # Trainerの準備（詳細ログ設定）
     trainer = pl.Trainer(
         max_epochs=max_epochs,
         accelerator="auto",
         devices="auto",
-        logger=True,
-        log_every_n_steps=10,
+        logger=tb_logger,
+        log_every_n_steps=5,  # より頻繁にログ出力
         enable_checkpointing=True,
+        callbacks=[progress_bar, checkpoint_callback, early_stop_callback],
         default_root_dir="lightning_logs",
+        enable_progress_bar=True,
+        enable_model_summary=True,
+        profiler="simple",  # シンプルプロファイラーを有効化
     )
+    
+    # トレーナー情報をログ出力
+    logger.info("=" * 30)
+    logger.info("Trainerの設定")
+    logger.info("=" * 30)
+    logger.info(f"最大エポック数: {trainer.max_epochs}")
+    logger.info(f"ログ出力間隔: {trainer.log_every_n_steps} ステップごと")
+    logger.info("チェックポイント保存: 有効")
+    logger.info("早期停止: 有効 (patience=10)")
+    logger.info("TensorBoardログ: lightning_logs/padim_training")
+    logger.info("=" * 30)
 
     # 学習実行
-    logger.info("学習を開始します...")
-    trainer.fit(model=model, datamodule=datamodule)
+    logger.info("=" * 50)
+    logger.info("PaDiMモデル学習開始")
+    logger.info("=" * 50)
+    logger.info(f"学習開始時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"使用デバイス: {trainer.device_ids if hasattr(trainer, 'device_ids') else 'auto'}")
+    logger.info(f"アクセラレータ: {trainer.accelerator}")
+    logger.info(f"学習データ量: {len(train_loader) if 'train_loader' in locals() else 'unknown'} バッチ")
+    logger.info(f"検証データ量: {len(val_loader) if 'val_loader' in locals() else 'unknown'} バッチ")
+    logger.info(f"モデルバックボーン: resnet18")
+    logger.info(f"特徴抽出レイヤー: ['layer1', 'layer2', 'layer3']")
+    logger.info("=" * 50)
+    
+    # 学習実行（詳細ログ付き）
+    try:
+        trainer.fit(model=model, datamodule=datamodule)
+        logger.info("=" * 50)
+        logger.info("学習が正常に完了しました")
+        logger.info(f"学習完了時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("=" * 50)
+    except Exception as e:
+        logger.error("=" * 50)
+        logger.error("学習中にエラーが発生しました")
+        logger.error(f"エラー詳細: {e}")
+        logger.error("=" * 50)
+        raise
 
     # モデル保存
-    logger.info(f"モデルを保存します: {model_save_path}")
-    trainer.save_checkpoint(model_save_path)
+    logger.info("=" * 30)
+    logger.info("モデル保存開始")
+    logger.info("=" * 30)
+    logger.info(f"保存パス: {model_save_path}")
+    
+    try:
+        trainer.save_checkpoint(model_save_path)
+        model_size = Path(model_save_path).stat().st_size / (1024 * 1024)  # MB
+        logger.info(f"チェックポイント保存完了: {model_size:.2f} MB")
+        
+        # 追加で.save()形式でも保存
+        save_dir = Path(model_save_path).parent / "padim_saved_model"
+        save_dir.mkdir(exist_ok=True)
+        model.model.save(str(save_dir))
+        logger.info(f"モデル（.save()形式）を保存しました: {save_dir}")
+        
+        # 保存されたファイルの詳細情報
+        if Path(model_save_path).exists():
+            stat = Path(model_save_path).stat()
+            logger.info(f"モデルファイルサイズ: {stat.st_size / (1024*1024):.2f} MB")
+            logger.info(f"保存日時: {datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        logger.info("=" * 30)
+        logger.info("モデル保存完了")
+        logger.info("=" * 30)
+        
+    except Exception as e:
+        logger.error("=" * 30)
+        logger.error("モデル保存エラー")
+        logger.error(f"エラー詳細: {e}")
+        logger.error("=" * 30)
+        raise
 
-    # 追加で.save()形式でも保存
-    save_dir = Path(model_save_path).parent / "padim_saved_model"
-    save_dir.mkdir(exist_ok=True)
-    model.model.save(str(save_dir))
-    logger.info(f"モデル（.save()形式）を保存しました: {save_dir}")
-
-    logger.info("学習が完了しました")
+    logger.info("🎉 PaDiMモデル学習が正常に完了しました 🎉")
 
     # 一時学習ディレクトリを削除（オプション）
     # main.pyでの推論高速化のため、temp_training_dataディレクトリを保持
