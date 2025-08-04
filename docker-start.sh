@@ -28,9 +28,10 @@ echo ""
 while true; do
     sleep 3600  # 1時間ごとにチェック
     
-    # cronサービスが停止していた場合は再起動
-    if ! pgrep cron > /dev/null; then
-        echo "[$(date)] cronサービスが停止していたため再起動します" >> /app/logs/cron.log
-        sudo service cron start
-    fi
+    # # cronサービスが停止していた場合は再起動
+    # if ! pgrep cron > /dev/null; then
+    #     echo "[$(date)] cronサービスが停止していたため再起動します" >> /app/logs/cron.log
+    #     sudo service cron start
+    # fi
+    echo "自動実行停止中..."
 done

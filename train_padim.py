@@ -7,9 +7,11 @@ PaDiM 異常検知モデル学習スクリプト
 - images/no_person: 正常画像 (人が写っていない画像)
 
 検証データ:
-- images/test: 検証用画像
+- images/test/normal: 正常な検証画像
+- images/test/anomaly: 異常な検証画像
 
 学習は正常画像のみで行い、異常検知モデルを構築します。
+testディレクトリ内のnormal/anomalyサブディレクトリは推論評価時に使用されます。
 """
 
 import sys
@@ -24,6 +26,7 @@ import lightning.pytorch as pl
 from anomalib.models import Padim
 from anomalib.data import Folder
 import shutil
+import torch
 
 
 def create_unified_training_dir(
@@ -35,10 +38,41 @@ def create_unified_training_dir(
     training_path = Path(training_dir)
     normal_dir = training_path / "normal"
 
+    # 既存のtemp_training_dataディレクトリが存在する場合、ソースディレクトリの画像数と比較
+    if normal_dir.exists():
+        existing_images = list(normal_dir.glob("*"))
+        existing_image_files = [
+            f
+            for f in existing_images
+            if f.is_file()
+            and f.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+        ]
+
+        # ソースディレクトリの画像数を確認
+        source_count = 0
+        images_path = Path(images_dir)
+        for i in range(16):
+            grid_dir = images_path / f"grid_{i:02d}"
+            if grid_dir.exists():
+                source_count += len([f for f in grid_dir.iterdir() if f.is_file() and f.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}])
+        
+        no_person_dir = images_path / "no_person"
+        if no_person_dir.exists():
+            source_count += len([f for f in no_person_dir.iterdir() if f.is_file() and f.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}])
+
+        # 既存ディレクトリの画像数がソースと一致し、十分な数がある場合のみ再利用
+        if len(existing_image_files) >= 10 and len(existing_image_files) == source_count:
+            logger.info(
+                f"既存のtemp_training_dataディレクトリを再利用します: {len(existing_image_files)} 画像"
+            )
+            return str(training_path), str(normal_dir), len(existing_image_files)
+        else:
+            logger.info(f"既存: {len(existing_image_files)}枚, ソース: {source_count}枚 - ディレクトリを再作成します")
+
     # ディレクトリを作成
     normal_dir.mkdir(parents=True, exist_ok=True)
 
-    # 既存ファイルを削除
+    # 既存ファイルを削除（再利用しない場合のみ）
     for file in normal_dir.glob("*"):
         if file.is_file():
             file.unlink()
@@ -46,7 +80,7 @@ def create_unified_training_dir(
     images_path = Path(images_dir)
     total_images = 0
 
-    # grid_XX ディレクトリから画像をコピー
+    # grid_XX ディレクトリから画像をコピー（空のディレクトリはスキップ）
     for i in range(16):
         grid_dir = images_path / f"grid_{i:02d}"
         if grid_dir.exists():
@@ -67,8 +101,10 @@ def create_unified_training_dir(
                     total_images += 1
             if image_count > 0:
                 logger.info(f"grid_{i:02d}: {image_count} 画像をコピー")
+            else:
+                logger.info(f"grid_{i:02d}: 画像が見つからないためスキップ")
 
-    # no_person ディレクトリから画像をコピー
+    # no_person ディレクトリから画像をコピー（空のディレクトリはスキップ）
     no_person_dir = images_path / "no_person"
     if no_person_dir.exists():
         image_count = 0
@@ -88,6 +124,8 @@ def create_unified_training_dir(
                 total_images += 1
         if image_count > 0:
             logger.info(f"no_person: {image_count} 画像をコピー")
+        else:
+            logger.info("no_person: 画像が見つからないためスキップ")
 
     logger.info(f"統合された学習用正常画像: {total_images} 枚")
     return str(training_path), str(normal_dir), total_images
@@ -134,13 +172,21 @@ def check_data_structure(images_dir: str) -> dict:
     # no_personディレクトリの確認
     no_person_dir = images_path / "no_person"
 
-    # testディレクトリの確認
+    # testディレクトリの確認（normal/anomalyサブディレクトリ含む）
     test_dir = images_path / "test"
+    test_normal_dir = test_dir / "normal" if test_dir.exists() else None
+    test_anomaly_dir = test_dir / "anomaly" if test_dir.exists() else None
 
     return {
         "grid_dirs": grid_dirs,
         "no_person_dir": no_person_dir if no_person_dir.exists() else None,
         "test_dir": test_dir if test_dir.exists() else None,
+        "test_normal_dir": test_normal_dir
+        if test_normal_dir and test_normal_dir.exists()
+        else None,
+        "test_anomaly_dir": test_anomaly_dir
+        if test_anomaly_dir and test_anomaly_dir.exists()
+        else None,
     }
 
 
@@ -240,12 +286,12 @@ def train_padim_model(
     logger.info(f"バッチサイズ: {batch_size}")
     logger.info(f"ワーカー数: {num_workers}")
 
-    # 統合学習ディレクトリを作成
+    # 統合学習ディレクトリを作成または再利用
     training_dir = "temp_training_data"
 
     try:
-        # 全画像を統合した一時ディレクトリを作成
-        training_root, normal_dir, total_images = create_unified_training_dir(
+        # 全画像を統合した一時ディレクトリを作成（既存の場合は再利用）
+        training_root, _, total_images = create_unified_training_dir(
             images_dir, training_dir
         )
 
@@ -256,26 +302,53 @@ def train_padim_model(
             logger.info("  - images/no_person (人が写っていない正常画像)")
             cleanup_training_dir(training_dir)
             return
+        
+        if total_images < 10:
+            logger.error(f"学習には最低10枚の画像が必要ですが、{total_images}枚しかありません")
+            cleanup_training_dir(training_dir)
+            return
 
-        # Folderデータモジュールを使用
+        # Folderデータモジュールを使用（学習は正常画像のみ）
+        # num_workersを0にして安定性を向上させる
         datamodule = Folder(
             name="padim_training",
             root=training_root,
             normal_dir="normal",
             train_batch_size=batch_size,
             eval_batch_size=batch_size,
-            num_workers=num_workers,
+            num_workers=0,  # マルチプロセシングを無効化して安定性向上
             val_split_ratio=0.2,  # 正常画像の20%を検証に使用
         )
+        logger.info("Folderデータモジュールを作成しました (num_workers=0で安定性向上)")
+
+        # 実際のファイル数を先に確認
+        actual_files = len([f for f in (Path(training_root) / "normal").iterdir() if f.is_file()])
+        logger.info(f"temp_training_data/normal内の実際のファイル数: {actual_files}")
 
         # データモジュールをセットアップ
+        logger.info("データモジュールをセットアップ中...")
         datamodule.setup()
+        logger.info("データモジュールのセットアップが完了しました")
+        
+        # デバッグ: 実際にデータが読み込まれているか確認
+        try:
+            train_loader = datamodule.train_dataloader()
+            val_loader = datamodule.val_dataloader()
+            logger.info(f"学習データセットサイズ: {len(train_loader) if train_loader else 0}")
+            logger.info(f"検証データセットサイズ: {len(val_loader) if val_loader else 0}")
+        except Exception as debug_e:
+            logger.error(f"データローダー作成でエラー: {debug_e}")
+            raise
 
     except Exception as e:
         logger.error(f"データセットの準備に失敗: {e}")
         # エラー時も一時ディレクトリを削除
         cleanup_training_dir(training_dir)
         return
+
+    # PyTorchのテンソル精度設定（Tensor Coresの警告対応）
+    torch.set_float32_matmul_precision('medium')
+    logger.info("PyTorchのfloat32行列乗算精度をmediumに設定しました")
 
     # モデルの準備
     model = create_padim_model(image_size=image_size)
@@ -307,8 +380,10 @@ def train_padim_model(
 
     logger.info("学習が完了しました")
 
-    # 一時学習ディレクトリを削除
-    cleanup_training_dir(training_dir)
+    # 一時学習ディレクトリを削除（オプション）
+    # main.pyでの推論高速化のため、temp_training_dataディレクトリを保持
+    logger.info(f"学習用ディレクトリを保持します（推論高速化のため）: {training_dir}")
+    # cleanup_training_dir(training_dir)  # コメントアウトして保持
 
 
 def main():
@@ -348,6 +423,16 @@ def main():
     parser.add_argument(
         "--check-only", action="store_true", help="データ構造のチェックのみ実行"
     )
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        help="学習後にtemp_training_dataディレクトリを削除",
+    )
+    parser.add_argument(
+        "--force-recreate",
+        action="store_true",
+        help="既存のtemp_training_dataディレクトリを強制的に再作成",
+    )
 
     args = parser.parse_args()
 
@@ -374,8 +459,22 @@ def main():
             logger.warning("no_personディレクトリが見つかりません")
 
         if data_structure["test_dir"]:
+            # testディレクトリ内のサブディレクトリごとに画像数を表示
+            if data_structure["test_normal_dir"]:
+                test_normal_count = count_images_in_directory(
+                    data_structure["test_normal_dir"]
+                )
+                logger.info(f"test/normal: {test_normal_count} 画像")
+
+            if data_structure["test_anomaly_dir"]:
+                test_anomaly_count = count_images_in_directory(
+                    data_structure["test_anomaly_dir"]
+                )
+                logger.info(f"test/anomaly: {test_anomaly_count} 画像")
+
+            # 全体のtest画像数も表示
             test_count = count_images_in_directory(data_structure["test_dir"])
-            logger.info(f"test: {test_count} 画像")
+            logger.info(f"test (合計): {test_count} 画像")
         else:
             logger.warning("testディレクトリが見つかりません")
 
@@ -403,13 +502,16 @@ def main():
         logger.info(f"合計正常画像数: {total_normal_images}")
 
         # 学習用データの情報を取得
-        normal_dirs, test_dir, normal_count, test_count = get_training_info(
-            args.images_dir
-        )
+        _, _, normal_count, _ = get_training_info(args.images_dir)
 
         if normal_count == 0:
             logger.error("正常画像が見つかりません")
             return 1
+
+        # --force-recreateオプションが指定された場合は既存ディレクトリを削除
+        if args.force_recreate and Path("temp_training_data").exists():
+            cleanup_training_dir("temp_training_data")
+            logger.info("--force-recreateオプションにより、既存のtemp_training_dataディレクトリを削除しました")
 
         # モデル学習の実行
         train_padim_model(
@@ -420,6 +522,13 @@ def main():
             batch_size=args.batch_size,
             num_workers=args.num_workers,
         )
+
+        # --cleanupオプションが指定された場合のみディレクトリを削除
+        if args.cleanup:
+            cleanup_training_dir("temp_training_data")
+            logger.info(
+                "--cleanupオプションにより、temp_training_dataディレクトリを削除しました"
+            )
 
         logger.info("すべての処理が完了しました")
         return 0
