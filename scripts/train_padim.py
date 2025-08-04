@@ -29,7 +29,9 @@ import torch
 
 
 def create_unified_training_dir(
-    images_dir: str, training_dir: str = "temp_training_data", image_size: tuple = (224, 224)
+    images_dir: str,
+    training_dir: str = "temp_training_data",
+    image_size: tuple = (224, 224),
 ) -> tuple:
     """全ての正常画像を統合した一時的な学習ディレクトリを作成（シェルスクリプト使用）"""
     import subprocess
@@ -39,60 +41,9 @@ def create_unified_training_dir(
     training_path = Path(training_dir)
     normal_dir = training_path / "normal"
 
-    # 既存のtemp_training_dataディレクトリが存在する場合、ソースディレクトリの画像数と比較
+    # リサイズ処理が必要なため、既存ディレクトリを強制的に再作成
     if normal_dir.exists():
-        existing_images = list(normal_dir.glob("*"))
-        existing_image_files = [
-            f
-            for f in existing_images
-            if f.is_file()
-            and f.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
-        ]
-
-        # ソースディレクトリの画像数を確認（高速化）
-        source_count = 0
-        images_path = Path(images_dir)
-        for i in range(16):
-            grid_dir = images_path / f"grid_{i:02d}"
-            if grid_dir.exists():
-                source_count += len(
-                    [
-                        f
-                        for f in grid_dir.iterdir()
-                        if f.is_file()
-                        and f.suffix.lower()
-                        in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
-                    ]
-                )
-
-        no_person_dir = images_path / "no_person"
-        if no_person_dir.exists():
-            source_count += len(
-                [
-                    f
-                    for f in no_person_dir.iterdir()
-                    if f.is_file()
-                    and f.suffix.lower()
-                    in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
-                ]
-            )
-
-        # 既存ディレクトリの画像数がソースと一致し、十分な数がある場合のみ再利用
-        if (
-            len(existing_image_files) >= 10
-            and len(existing_image_files) == source_count
-        ):
-            logger.info(
-                f"既存のtemp_training_dataディレクトリを再利用します: {len(existing_image_files)} 画像"
-            )
-            return str(training_path), str(normal_dir), len(existing_image_files)
-        else:
-            logger.info(
-                f"既存: {len(existing_image_files)}枚, ソース: {source_count}枚 - ディレクトリを再作成します"
-            )
-
-    # 既存ファイルを削除（再利用しない場合のみ）
-    if normal_dir.exists():
+        logger.info("リサイズ処理のため既存ディレクトリを削除して再作成します")
         for file in normal_dir.glob("*"):
             if file.is_file():
                 file.unlink()
@@ -320,10 +271,10 @@ def train_padim_model(
         else:
             logger.info(f"CPU数: {cpu_count}, 使用ワーカー数: {optimal_workers}")
 
-        # データ量に応じたバッチサイズの調整
-        # 元画像(640x480)は自動でリサイズされるため、メモリ効率は良好
-        # vstackエラー回避のため、非常に小さなバッチサイズを使用
-        adjusted_batch_size = min(8, max(1, total_images // 50))  # 最低1、最大8、全データの1/50
+        # リサイズ済み画像使用のため、標準的なバッチサイズを使用
+        adjusted_batch_size = min(
+            batch_size, max(1, total_images // 10)
+        )  # 最低1、最大でも全データの1/10
         logger.info(
             f"調整後バッチサイズ: {adjusted_batch_size} (元画像640x480→{image_size}にリサイズ済み, データ量: {total_images})"
         )
@@ -369,46 +320,27 @@ def train_padim_model(
             if train_size == 0:
                 logger.error("学習データローダーが空です")
                 raise ValueError("学習データローダーが空のため、学習を実行できません")
-            
-            # vstackエラー回避のための追加チェック
-            if train_size < 2:
-                logger.warning(f"学習データセットが小さすぎます（{train_size}バッチ）")
-                logger.info("バッチサイズを1に調整して再試行します")
-                adjusted_batch_size = 1
-                # データモジュールを再作成
-                datamodule = Folder(
-                    name="padim_training",
-                    root=training_root,
-                    normal_dir="normal",
-                    abnormal_dir="normal",
-                    train_batch_size=1,
-                    eval_batch_size=1,
-                    num_workers=optimal_workers,
-                    val_split_ratio=0.2,
-                )
-                datamodule.setup()
-                train_loader = datamodule.train_dataloader()
-                val_loader = datamodule.val_dataloader()
-                train_size = len(train_loader) if train_loader else 0
-                val_size = len(val_loader) if val_loader else 0
-                logger.info(f"再設定後 - 学習データセットサイズ: {train_size} バッチ")
+
+            # リサイズ済み画像により安定性が向上
 
             # 最初のバッチを試験的に読み込んで検証
             try:
                 first_batch = next(iter(train_loader))
                 # Anomalibの新しいImageBatchオブジェクトに対応
-                if hasattr(first_batch, 'image'):
+                if hasattr(first_batch, "image"):
                     batch_shape = first_batch.image.shape
                     logger.info(f"最初のバッチサイズ: {batch_shape}")
-                elif hasattr(first_batch, 'keys') and 'image' in first_batch:
-                    batch_shape = first_batch['image'].shape
+                elif hasattr(first_batch, "keys") and "image" in first_batch:
+                    batch_shape = first_batch["image"].shape
                     logger.info(f"最初のバッチサイズ: {batch_shape}")
                 else:
                     logger.info(f"最初のバッチ: {type(first_batch)} オブジェクト")
                 logger.info("データローダーの動作確認完了")
             except Exception as batch_e:
                 logger.warning(f"バッチ読み込みテスト中にエラー: {batch_e}")
-                logger.info("データローダーは正常に作成されました（バッチテストをスキップ）")
+                logger.info(
+                    "データローダーは正常に作成されました（バッチテストをスキップ）"
+                )
 
         except Exception as debug_e:
             logger.warning(f"データローダーデバッグ中にエラー: {debug_e}")
@@ -421,7 +353,9 @@ def train_padim_model(
             logger.info("データローダーテストエラーを無視して学習を続行します")
         else:
             # その他のエラーでも一時ディレクトリは保持（デバッグのため）
-            logger.info(f"一時学習ディレクトリを保持します（デバッグ用）: {training_dir}")
+            logger.info(
+                f"一時学習ディレクトリを保持します（デバッグ用）: {training_dir}"
+            )
             return
 
     # PyTorchのテンソル精度設定（Tensor Coresの警告対応）
@@ -431,10 +365,9 @@ def train_padim_model(
     # モデルの準備（画像サイズを明示的に指定）
     logger.info(f"PaDiMモデルを作成中（画像サイズ: {image_size}）")
     model = create_padim_model(image_size=image_size)
-    
-    # 画像は既にリサイズ済みのため、シンプルな正規化のみ適用
-    logger.info("既にリサイズ済みの画像のため、標準的な前処理のみ適用...")
-    logger.info("PaDiMモデルのpre_processorを使用してImageNet正規化を適用")
+
+    # 画像は既にリサイズ済み
+    logger.info("リサイズ済み画像を使用します")
 
     # カスタムロガーとコールバックの設定
     try:
@@ -524,8 +457,8 @@ def train_padim_model(
     logger.info(
         f"検証データ量: {len(val_loader) if 'val_loader' in locals() else 'unknown'} バッチ"
     )
-    logger.info(f"モデルバックボーン: resnet18")
-    logger.info(f"特徴抽出レイヤー: ['layer1', 'layer2', 'layer3']")
+    logger.info("モデルバックボーン: resnet18")
+    logger.info("特徴抽出レイヤー: ['layer1', 'layer2', 'layer3']")
     logger.info("=" * 50)
 
     # 学習実行（詳細ログ付き）
