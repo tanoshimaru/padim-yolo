@@ -321,7 +321,8 @@ def train_padim_model(
 
         # データ量に応じたバッチサイズの調整
         # 元画像(640x480)は自動でリサイズされるため、メモリ効率は良好
-        adjusted_batch_size = min(batch_size, max(1, total_images // 10))  # 最低1、最大でも全データの1/10
+        # vstackエラー回避のため、より小さなバッチサイズを使用
+        adjusted_batch_size = min(16, max(1, total_images // 20))  # 最低1、最大16、全データの1/20
         logger.info(
             f"調整後バッチサイズ: {adjusted_batch_size} (元画像640x480→{image_size}にリサイズ, データ量: {total_images})"
         )
@@ -331,6 +332,7 @@ def train_padim_model(
             root=training_root,
             normal_dir="normal",
             abnormal_dir="normal",  # 異常検知では異常データは不要、normalを指定
+            image_size=list(image_size),  # タプルをリストに変換
             train_batch_size=adjusted_batch_size,
             eval_batch_size=adjusted_batch_size,
             num_workers=optimal_workers,  # 環境に応じて最適化
@@ -366,6 +368,30 @@ def train_padim_model(
             if train_size == 0:
                 logger.error("学習データローダーが空です")
                 raise ValueError("学習データローダーが空のため、学習を実行できません")
+            
+            # vstackエラー回避のための追加チェック
+            if train_size < 2:
+                logger.warning(f"学習データセットが小さすぎます（{train_size}バッチ）")
+                logger.info("バッチサイズを1に調整して再試行します")
+                adjusted_batch_size = 1
+                # データモジュールを再作成
+                datamodule = Folder(
+                    name="padim_training",
+                    root=training_root,
+                    normal_dir="normal",
+                    abnormal_dir="normal",
+                    image_size=list(image_size),
+                    train_batch_size=1,
+                    eval_batch_size=1,
+                    num_workers=optimal_workers,
+                    val_split_ratio=0.2,
+                )
+                datamodule.setup()
+                train_loader = datamodule.train_dataloader()
+                val_loader = datamodule.val_dataloader()
+                train_size = len(train_loader) if train_loader else 0
+                val_size = len(val_loader) if val_loader else 0
+                logger.info(f"再設定後 - 学習データセットサイズ: {train_size} バッチ")
 
             # 最初のバッチを試験的に読み込んで検証
             try:
@@ -402,7 +428,8 @@ def train_padim_model(
     torch.set_float32_matmul_precision("medium")
     logger.info("PyTorchのfloat32行列乗算精度をmediumに設定しました")
 
-    # モデルの準備
+    # モデルの準備（画像サイズを明示的に指定）
+    logger.info(f"PaDiMモデルを作成中（画像サイズ: {image_size}）")
     model = create_padim_model(image_size=image_size)
 
     # カスタムロガーとコールバックの設定
