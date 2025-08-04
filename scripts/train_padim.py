@@ -306,14 +306,22 @@ def train_padim_model(
 
         # Folderデータモジュールを使用（学習は正常画像のみ）
         # num_workersを0にして安定性を向上させる
+        # データ量に応じたバッチサイズの調整
+        adjusted_batch_size = min(batch_size, max(1, total_images // 10))  # 最低1、最大でも全データの1/10
+        logger.info(f"バッチサイズを調整: {batch_size} -> {adjusted_batch_size} (データ量: {total_images})")
+        
         datamodule = Folder(
             name="padim_training",
             root=training_root,
             normal_dir="normal",
-            train_batch_size=batch_size,
-            eval_batch_size=batch_size,
+            abnormal_dir="normal",  # 異常検知では異常データは不要、normalを指定
+            train_batch_size=adjusted_batch_size,
+            eval_batch_size=adjusted_batch_size,
             num_workers=0,  # マルチプロセシングを無効化して安定性向上
             val_split_ratio=0.2,  # 正常画像の20%を検証に使用
+            image_size=(image_size[0], image_size[1]),  # 画像サイズを明示的に指定
+            transform_config_train=None,  # デフォルトの変換を使用
+            transform_config_eval=None,   # デフォルトの変換を使用
         )
         logger.info("Folderデータモジュールを作成しました (num_workers=0で安定性向上)")
 
@@ -332,12 +340,27 @@ def train_padim_model(
         try:
             train_loader = datamodule.train_dataloader()
             val_loader = datamodule.val_dataloader()
-            logger.info(
-                f"学習データセットサイズ: {len(train_loader) if train_loader else 0}"
-            )
-            logger.info(
-                f"検証データセットサイズ: {len(val_loader) if val_loader else 0}"
-            )
+            
+            train_size = len(train_loader) if train_loader else 0
+            val_size = len(val_loader) if val_loader else 0
+            
+            logger.info(f"学習データセットサイズ: {train_size} バッチ")
+            logger.info(f"検証データセットサイズ: {val_size} バッチ")
+            
+            # データローダーが空でないことを確認
+            if train_size == 0:
+                logger.error("学習データローダーが空です")
+                raise ValueError("学習データローダーが空のため、学習を実行できません")
+            
+            # 最初のバッチを試験的に読み込んで検証
+            try:
+                first_batch = next(iter(train_loader))
+                logger.info(f"最初のバッチサイズ: {first_batch['image'].shape if 'image' in first_batch else 'unknown'}")
+                logger.info("データローダーの動作確認完了")
+            except Exception as batch_e:
+                logger.error(f"バッチ読み込みテストでエラー: {batch_e}")
+                raise
+                
         except Exception as debug_e:
             logger.error(f"データローダー作成でエラー: {debug_e}")
             raise
