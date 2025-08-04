@@ -321,8 +321,8 @@ def train_padim_model(
 
         # データ量に応じたバッチサイズの調整
         # 元画像(640x480)は自動でリサイズされるため、メモリ効率は良好
-        # vstackエラー回避のため、より小さなバッチサイズを使用
-        adjusted_batch_size = min(16, max(1, total_images // 20))  # 最低1、最大16、全データの1/20
+        # vstackエラー回避のため、非常に小さなバッチサイズを使用
+        adjusted_batch_size = min(8, max(1, total_images // 50))  # 最低1、最大8、全データの1/50
         logger.info(
             f"調整後バッチサイズ: {adjusted_batch_size} (元画像640x480→{image_size}にリサイズ, データ量: {total_images})"
         )
@@ -430,6 +430,31 @@ def train_padim_model(
     # モデルの準備（画像サイズを明示的に指定）
     logger.info(f"PaDiMモデルを作成中（画像サイズ: {image_size}）")
     model = create_padim_model(image_size=image_size)
+    
+    # データモジュールとモデルの統合アプローチ
+    logger.info("PaDiMモデルとデータモジュールを統合中...")
+    try:
+        # Anomalibの標準的な方法でプリプロセッサを設定
+        if hasattr(datamodule, 'transform'):
+            datamodule.transform = model.pre_processor
+        if hasattr(datamodule, 'train_transform'):
+            datamodule.train_transform = model.pre_processor
+        if hasattr(datamodule, 'eval_transform'):
+            datamodule.eval_transform = model.pre_processor
+        if hasattr(datamodule, 'val_transform'):
+            datamodule.val_transform = model.pre_processor
+        if hasattr(datamodule, 'test_transform'):
+            datamodule.test_transform = model.pre_processor
+            
+        logger.info("利用可能な全てのtransformにプリプロセッサを設定しました")
+        
+        # データモジュールを再セットアップ
+        datamodule.setup()
+        logger.info("データモジュール再セットアップ完了")
+        
+    except Exception as e:
+        logger.warning(f"プリプロセッサ設定中にエラー: {e}")
+        logger.info("デフォルト設定で続行します")
 
     # カスタムロガーとコールバックの設定
     try:
