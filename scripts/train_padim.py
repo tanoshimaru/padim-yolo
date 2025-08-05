@@ -309,10 +309,9 @@ def train_padim_model(
         else:
             logger.info(f"CPU数: {cpu_count}, 使用ワーカー数: {optimal_workers}")
 
-        # リサイズ済み画像使用のため、標準的なバッチサイズを使用
-        adjusted_batch_size = min(
-            batch_size, max(1, total_images // 10)
-        )  # 最低1、最大でも全データの1/10
+        # Memory bank empty エラー回避のため、適切なバッチサイズを設定
+        # PaDiMは特徴抽出にある程度のサンプル数が必要
+        adjusted_batch_size = min(batch_size, max(8, total_images // 20))  # 最低8、最大でも全データの1/20
         logger.info(
             f"調整後バッチサイズ: {adjusted_batch_size} (元画像640x480→{image_size}にリサイズ済み, データ量: {total_images})"
         )
