@@ -245,6 +245,7 @@ def create_padim_model(
         layers=layers,
         pre_trained=True,
         pre_processor=pre_processor,
+        n_features=None,  # 自動で特徴量数を決定
     )
 
     return model
@@ -311,7 +312,8 @@ def train_padim_model(
 
         # Memory bank empty エラー回避のため、適切なバッチサイズを設定
         # PaDiMは特徴抽出にある程度のサンプル数が必要
-        adjusted_batch_size = min(batch_size, max(8, total_images // 20))  # 最低8、最大でも全データの1/20
+        # より大きなバッチサイズでメモリバンクを確実に蓄積
+        adjusted_batch_size = min(batch_size, max(16, total_images // 10))  # 最低16、最大でも全データの1/10
         logger.info(
             f"調整後バッチサイズ: {adjusted_batch_size} (元画像640x480→{image_size}にリサイズ済み, データ量: {total_images})"
         )
@@ -324,7 +326,7 @@ def train_padim_model(
             train_batch_size=adjusted_batch_size,
             eval_batch_size=adjusted_batch_size,
             num_workers=optimal_workers,  # 環境に応じて最適化
-            val_split_ratio=0.2,  # 正常画像の20%を検証に使用
+            val_split_ratio=0.2,  # 検証用は20%で問題なし
         )
         logger.info(
             f"Folderデータモジュールを作成しました (num_workers={optimal_workers})"
@@ -357,8 +359,10 @@ def train_padim_model(
             if train_size == 0:
                 logger.error("学習データローダーが空です")
                 raise ValueError("学習データローダーが空のため、学習を実行できません")
-
-            # リサイズ済み画像により安定性が向上
+            
+            # バッチサイズとデータ量の関係をチェック
+            total_train_samples = train_size * adjusted_batch_size
+            logger.info(f"推定学習サンプル数: {total_train_samples} (バッチ数 × バッチサイズ)")
 
             # 最初のバッチを試験的に読み込んで検証
             try:
@@ -366,10 +370,17 @@ def train_padim_model(
                 # Anomalibの新しいImageBatchオブジェクトに対応
                 if hasattr(first_batch, "image"):
                     batch_shape = first_batch.image.shape
-                    logger.info(f"最初のバッチサイズ: {batch_shape}")
+                    logger.info(f"実際のバッチ形状: {batch_shape}")
+                    # バッチサイズが十分であることを確認
+                    actual_batch_size = batch_shape[0]
+                    if actual_batch_size < 8:
+                        logger.warning(f"バッチサイズが小さすぎます: {actual_batch_size} < 8")
                 elif hasattr(first_batch, "keys") and "image" in first_batch:
                     batch_shape = first_batch["image"].shape
-                    logger.info(f"最初のバッチサイズ: {batch_shape}")
+                    logger.info(f"実際のバッチ形状: {batch_shape}")
+                    actual_batch_size = batch_shape[0]
+                    if actual_batch_size < 8:
+                        logger.warning(f"バッチサイズが小さすぎます: {actual_batch_size} < 8")
                 else:
                     logger.info(f"最初のバッチ: {type(first_batch)} オブジェクト")
                 logger.info("データローダーの動作確認完了")
