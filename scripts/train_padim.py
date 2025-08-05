@@ -41,12 +41,50 @@ def create_unified_training_dir(
     training_path = Path(training_dir)
     normal_dir = training_path / "normal"
 
-    # リサイズ処理が必要なため、既存ディレクトリを強制的に再作成
+    # 既存ディレクトリがある場合、リサイズ済みかどうかを確認
     if normal_dir.exists():
-        logger.info("リサイズ処理のため既存ディレクトリを削除して再作成します")
-        for file in normal_dir.glob("*"):
-            if file.is_file():
-                file.unlink()
+        existing_images = list(normal_dir.glob("*"))
+        existing_image_files = [
+            f
+            for f in existing_images
+            if f.is_file()
+            and f.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+        ]
+
+        # 既存画像のサイズをチェック（最初の画像で判定）
+        if existing_image_files:
+            from PIL import Image
+
+            try:
+                sample_image = Image.open(existing_image_files[0])
+                current_size = sample_image.size
+                target_size = (image_size[0], image_size[1])
+
+                if current_size == target_size and len(existing_image_files) >= 10:
+                    logger.info(
+                        f"既存の画像は既に{target_size}にリサイズ済みです: {len(existing_image_files)} 画像"
+                    )
+                    return (
+                        str(training_path),
+                        str(normal_dir),
+                        len(existing_image_files),
+                    )
+                else:
+                    logger.info(
+                        f"既存画像サイズ: {current_size} → ターゲット: {target_size} - 再リサイズが必要"
+                    )
+                    # ファイルを削除して再作成
+                    for file in existing_image_files:
+                        file.unlink()
+            except Exception as e:
+                logger.warning(f"既存画像のサイズ確認エラー: {e} - 再作成します")
+                # エラー時は既存ファイルを削除
+                for file in existing_image_files:
+                    file.unlink()
+        else:
+            logger.info("既存ディレクトリは空です - 新規作成")
+    else:
+        logger.info("新規でtemp_training_dataディレクトリを作成")
 
     # シェルスクリプトで高速リサイズ&コピーを実行
     script_path = Path(__file__).parent / "copy_training_images_resized.sh"
@@ -595,7 +633,7 @@ def main():
             # testディレクトリ内のサブディレクトリごとに画像数を表示
             test_normal_count = 0
             test_anomaly_count = 0
-            
+
             if data_structure["test_normal_dir"]:
                 test_normal_count = count_images_in_directory(
                     data_structure["test_normal_dir"]
