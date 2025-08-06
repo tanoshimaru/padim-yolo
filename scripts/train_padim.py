@@ -352,16 +352,22 @@ def train_padim_model(
     logger.info("PaDiMモデル学習開始")
     logger.info("=" * 50)
     logger.info(f"学習開始時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(
-        f"使用デバイス: {engine.trainer.device_ids if hasattr(engine.trainer, 'device_ids') else 'auto'}"
-    )
-    logger.info(f"アクセラレータ: {engine.trainer.accelerator}")
     logger.info("モデルバックボーン: resnet18")
+    # logger.info(
+    #     f"使用デバイス: {engine.trainer.device_ids if hasattr(engine.trainer, 'device_ids') else 'auto'}"
+    # )
+    # logger.info(f"アクセラレータ: {engine.trainer.accelerator}")
     logger.info("特徴抽出レイヤー: ['layer1', 'layer2', 'layer3']")
     logger.info("=" * 50)
 
     try:
         engine.fit(model=model, datamodule=datamodule)
+
+        logger.info(
+            f"使用デバイス: {engine.trainer.device_ids if hasattr(engine.trainer, 'device_ids') else 'auto'}"
+        )
+        logger.info(f"アクセラレータ: {engine.trainer.accelerator}")
+
         logger.info("=" * 50)
         logger.info("学習が正常に完了しました")
         logger.info(f"学習完了時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -409,6 +415,7 @@ def train_padim_model(
 
             # testを実行
             logger.info("テスト実行中...")
+            model = Padim.load_from_checkpoint(model_save_path)
             test_results = engine.test(model=model, datamodule=test_datamodule)
 
             logger.info("=" * 30)
