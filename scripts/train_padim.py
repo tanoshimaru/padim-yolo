@@ -246,6 +246,36 @@ def create_padim_model(
     return model
 
 
+def create_test_datamodule(
+    images_dir: str, image_size: tuple = (224, 224), batch_size: int = 32
+) -> Folder:
+    """test用のdatamoduleを作成"""
+    logger = logging.getLogger(__name__)
+
+    images_path = Path(images_dir)
+    test_dir = images_path / "test"
+
+    if not test_dir.exists():
+        logger.warning("testディレクトリが見つかりません")
+        return None
+
+    # test用datamoduleを作成
+    test_datamodule = Folder(
+        name="padim_test",
+        root=str(test_dir),
+        normal_dir="normal",
+        abnormal_dir="anomaly",
+        train_batch_size=batch_size,
+        eval_batch_size=batch_size,
+        num_workers=0,
+        val_split_ratio=0.0,  # testデータなので分割しない
+        test_split_ratio=1.0,  # 全てをtestデータとして使用
+    )
+
+    logger.info(f"test用datamoduleを作成: {test_dir}")
+    return test_datamodule
+
+
 def train_padim_model(
     images_dir: str,
     model_save_path: str = "models/padim_trained.ckpt",
@@ -362,6 +392,36 @@ def train_padim_model(
         logger.error(f"エラー詳細: {e}")
         logger.error("=" * 30)
         raise
+
+    # test実行
+    logger.info("=" * 30)
+    logger.info("テスト開始")
+    logger.info("=" * 30)
+
+    try:
+        # test用datamoduleを作成
+        test_datamodule = create_test_datamodule(images_dir, image_size, batch_size)
+
+        if test_datamodule is not None:
+            # testデータをセットアップ
+            test_datamodule.setup()
+
+            # testを実行
+            logger.info("テスト実行中...")
+            test_results = engine.test(model=model, datamodule=test_datamodule)
+
+            logger.info("=" * 30)
+            logger.info("テスト完了")
+            logger.info(f"テスト結果: {test_results}")
+            logger.info("=" * 30)
+        else:
+            logger.warning(
+                "test用datamoduleの作成に失敗したため、テストをスキップします"
+            )
+
+    except Exception as e:
+        logger.error(f"テスト実行中にエラーが発生: {e}")
+        logger.warning("テストに失敗しましたが、学習は正常に完了しています")
 
     logger.info("🎉 PaDiMモデル学習が正常に完了しました 🎉")
 
