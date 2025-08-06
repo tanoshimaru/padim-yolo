@@ -247,7 +247,7 @@ def create_padim_model(
 
 
 def create_test_datamodule(
-    images_dir: str, image_size: tuple = (224, 224), batch_size: int = 32
+    images_dir: str, image_size: tuple = (224, 224), batch_size: int = 16
 ) -> Folder:
     """test用のdatamoduleを作成"""
     logger = logging.getLogger(__name__)
@@ -281,7 +281,7 @@ def train_padim_model(
     model_save_path: str = "models/padim_trained.ckpt",
     image_size: tuple = (224, 224),  # ResNet標準サイズ（最適な処理効率）
     max_epochs: int = 10,
-    batch_size: int = 32,
+    batch_size: int = 16,
     num_workers: int = 4,
 ) -> None:
     """PaDiMモデルの学習"""
@@ -454,7 +454,7 @@ def main():
         "--max-epochs", type=int, default=100, help="最大エポック数 (default: 100)"
     )
     parser.add_argument(
-        "--batch-size", type=int, default=32, help="バッチサイズ (default: 32)"
+        "--batch-size", type=int, default=16, help="バッチサイズ (default: 16)"
     )
     parser.add_argument(
         "--num-workers",
