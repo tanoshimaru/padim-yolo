@@ -323,6 +323,7 @@ def train_padim_model(
             eval_batch_size=batch_size,
             num_workers=num_workers,
             val_split_ratio=0.2,
+            test_split_ratio=0.0,  # 学習用なのでtestは使用しない
         )
         logger.info(f"Folderデータモジュールを作成しました (num_workers={num_workers})")
 
