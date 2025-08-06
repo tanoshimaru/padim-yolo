@@ -21,11 +21,10 @@ from pathlib import Path
 from typing import List
 import argparse
 
-import lightning.pytorch as pl
-from anomalib.models import Padim
 from anomalib.data import Folder
+from anomalib.engine import Engine
+from anomalib.models import Padim
 import shutil
-import torch
 
 
 def create_unified_training_dir(
@@ -64,11 +63,7 @@ def create_unified_training_dir(
                     logger.info(
                         f"既存の画像は既に{target_size}にリサイズ済みです: {len(existing_image_files)} 画像"
                     )
-                    return (
-                        str(training_path),
-                        str(normal_dir),
-                        len(existing_image_files),
-                    )
+                    return str(training_path), len(existing_image_files)
                 else:
                     logger.info(
                         f"既存画像サイズ: {current_size} → ターゲット: {target_size} - 再リサイズが必要"
@@ -106,13 +101,13 @@ def create_unified_training_dir(
 
     except subprocess.CalledProcessError as e:
         logger.error(f"シェルスクリプト実行エラー: {e.stderr}")
-        return str(training_path), str(normal_dir), 0
+        return str(training_path), 0
     except (ValueError, IndexError):
         logger.error("シェルスクリプトからの出力解析エラー")
-        return str(training_path), str(normal_dir), 0
+        return str(training_path), 0
 
     logger.info(f"統合された学習用正常画像: {total_images} 枚")
-    return str(training_path), str(normal_dir), total_images
+    return str(training_path), total_images
 
 
 def cleanup_training_dir(training_dir: str):
@@ -253,9 +248,9 @@ def create_padim_model(
 
 def train_padim_model(
     images_dir: str,
-    model_save_path: str = "models/padim_model.ckpt",
+    model_save_path: str = "models/padim_trained.ckpt",
     image_size: tuple = (224, 224),  # ResNet標準サイズ（最適な処理効率）
-    max_epochs: int = 100,
+    max_epochs: int = 10,
     batch_size: int = 32,
     num_workers: int = 4,
 ) -> None:
@@ -277,7 +272,7 @@ def train_padim_model(
 
     try:
         # 全画像を統合した一時ディレクトリを作成（既存の場合は再利用）
-        training_root, _, total_images = create_unified_training_dir(
+        training_root, total_images = create_unified_training_dir(
             images_dir, training_dir, image_size
         )
 
@@ -289,49 +284,17 @@ def train_padim_model(
             cleanup_training_dir(training_dir)
             return
 
-        if total_images < 10:
-            logger.error(
-                f"学習には最低10枚の画像が必要ですが、{total_images}枚しかありません"
-            )
-            cleanup_training_dir(training_dir)
-            return
-
         # Folderデータモジュールを使用（学習は正常画像のみ）
-        # 環境に応じたワーカー数とバッチサイズを設定
-        import os
-
-        cpu_count = os.cpu_count() or 1
-        optimal_workers = min(4, max(0, cpu_count - 1))  # CPU数-1、最大4
-
-        # Dockerやコンテナ環境では安定性のためワーカー数を制限
-        if os.path.exists("/.dockerenv") or os.environ.get("CONTAINER"):
-            optimal_workers = 0
-            logger.info("Docker/コンテナ環境を検出 - num_workers=0に設定")
-        else:
-            logger.info(f"CPU数: {cpu_count}, 使用ワーカー数: {optimal_workers}")
-
-        # Memory bank empty エラー回避のため、適切なバッチサイズを設定
-        # PaDiMは特徴抽出にある程度のサンプル数が必要
-        # より大きなバッチサイズでメモリバンクを確実に蓄積
-        adjusted_batch_size = min(batch_size, max(16, total_images // 10))  # 最低16、最大でも全データの1/10
-        logger.info(
-            f"調整後バッチサイズ: {adjusted_batch_size} (元画像640x480→{image_size}にリサイズ済み, データ量: {total_images})"
-        )
-
         datamodule = Folder(
             name="padim_training",
             root=training_root,
             normal_dir="normal",
-            abnormal_dir="normal",  # 異常検知では異常データは不要、normalを指定
-            train_batch_size=adjusted_batch_size,
-            eval_batch_size=adjusted_batch_size,
-            num_workers=optimal_workers,  # 環境に応じて最適化
-            val_split_ratio=0.2,  # 検証用は20%で問題なし
+            train_batch_size=batch_size,
+            eval_batch_size=batch_size,
+            num_workers=num_workers,
+            val_split_ratio=0.2,
         )
-        logger.info(
-            f"Folderデータモジュールを作成しました (num_workers={optimal_workers})"
-        )
-        logger.info(f"画像は既に{image_size}にリサイズ済みです")
+        logger.info(f"Folderデータモジュールを作成しました (num_workers={num_workers})")
 
         # 実際のファイル数を先に確認
         actual_files = len(
@@ -344,151 +307,14 @@ def train_padim_model(
         datamodule.setup()
         logger.info("データモジュールのセットアップが完了しました")
 
-        # デバッグ: 実際にデータが読み込まれているか確認
-        try:
-            train_loader = datamodule.train_dataloader()
-            val_loader = datamodule.val_dataloader()
-
-            train_size = len(train_loader) if train_loader else 0
-            val_size = len(val_loader) if val_loader else 0
-
-            logger.info(f"学習データセットサイズ: {train_size} バッチ")
-            logger.info(f"検証データセットサイズ: {val_size} バッチ")
-
-            # データローダーが空でないことを確認
-            if train_size == 0:
-                logger.error("学習データローダーが空です")
-                raise ValueError("学習データローダーが空のため、学習を実行できません")
-            
-            # バッチサイズとデータ量の関係をチェック
-            total_train_samples = train_size * adjusted_batch_size
-            logger.info(f"推定学習サンプル数: {total_train_samples} (バッチ数 × バッチサイズ)")
-
-            # 最初のバッチを試験的に読み込んで検証
-            try:
-                first_batch = next(iter(train_loader))
-                # Anomalibの新しいImageBatchオブジェクトに対応
-                if hasattr(first_batch, "image"):
-                    batch_shape = first_batch.image.shape
-                    logger.info(f"実際のバッチ形状: {batch_shape}")
-                    # バッチサイズが十分であることを確認
-                    actual_batch_size = batch_shape[0]
-                    if actual_batch_size < 8:
-                        logger.warning(f"バッチサイズが小さすぎます: {actual_batch_size} < 8")
-                elif hasattr(first_batch, "keys") and "image" in first_batch:
-                    batch_shape = first_batch["image"].shape
-                    logger.info(f"実際のバッチ形状: {batch_shape}")
-                    actual_batch_size = batch_shape[0]
-                    if actual_batch_size < 8:
-                        logger.warning(f"バッチサイズが小さすぎます: {actual_batch_size} < 8")
-                else:
-                    logger.info(f"最初のバッチ: {type(first_batch)} オブジェクト")
-                logger.info("データローダーの動作確認完了")
-            except Exception as batch_e:
-                logger.warning(f"バッチ読み込みテスト中にエラー: {batch_e}")
-                logger.info(
-                    "データローダーは正常に作成されました（バッチテストをスキップ）"
-                )
-
-        except Exception as debug_e:
-            logger.warning(f"データローダーデバッグ中にエラー: {debug_e}")
-            logger.info("データローダーは作成されました。学習を続行します。")
-
     except Exception as e:
         logger.error(f"データセットの準備に失敗: {e}")
-        # データローダーテストエラーの場合は学習を続行
-        if "ImageBatch" in str(e) or "subscriptable" in str(e):
-            logger.info("データローダーテストエラーを無視して学習を続行します")
-        else:
-            # その他のエラーでも一時ディレクトリは保持（デバッグのため）
-            logger.info(
-                f"一時学習ディレクトリを保持します（デバッグ用）: {training_dir}"
-            )
-            return
-
-    # PyTorchのテンソル精度設定（Tensor Coresの警告対応）
-    torch.set_float32_matmul_precision("medium")
-    logger.info("PyTorchのfloat32行列乗算精度をmediumに設定しました")
+        raise
 
     # モデルの準備（画像サイズを明示的に指定）
     logger.info(f"PaDiMモデルを作成中（画像サイズ: {image_size}）")
     model = create_padim_model(image_size=image_size)
-
-    # 画像は既にリサイズ済み
-    logger.info("リサイズ済み画像を使用します")
-
-    # カスタムロガーとコールバックの設定
-    try:
-        from lightning.pytorch.loggers import TensorBoardLogger
-        from lightning.pytorch.callbacks import (
-            ModelCheckpoint,
-            EarlyStopping,
-            ProgressBar,
-        )
-    except ImportError:
-        # fallback for older versions
-        from pytorch_lightning.loggers import TensorBoardLogger
-        from pytorch_lightning.callbacks import (
-            ModelCheckpoint,
-            EarlyStopping,
-            ProgressBar,
-        )
-
-    # TensorBoardロガー
-    tb_logger = TensorBoardLogger(
-        save_dir="lightning_logs", name="padim_training", version=None
-    )
-
-    # プログレスバーコールバック
-    try:
-        progress_bar = ProgressBar(refresh_rate=1)  # 古いバージョン用
-    except TypeError:
-        try:
-            progress_bar = ProgressBar(refresh_rate_per_second=1)  # 新しいバージョン用
-        except TypeError:
-            progress_bar = ProgressBar()  # 引数なしで作成
-
-    # モデルチェックポイントコールバック
-    checkpoint_callback = ModelCheckpoint(
-        dirpath="lightning_logs/checkpoints",
-        filename="padim-{epoch:02d}-{val_loss:.2f}",
-        save_top_k=3,
-        monitor="val_loss",
-        mode="min",
-        save_last=True,
-        verbose=True,
-    )
-
-    # 早期停止コールバック
-    early_stop_callback = EarlyStopping(
-        monitor="val_loss", patience=10, mode="min", verbose=True
-    )
-
-    # Trainerの準備（詳細ログ設定）
-    trainer = pl.Trainer(
-        max_epochs=max_epochs,
-        accelerator="auto",
-        devices="auto",
-        logger=tb_logger,
-        log_every_n_steps=5,  # より頻繁にログ出力
-        enable_checkpointing=True,
-        callbacks=[progress_bar, checkpoint_callback, early_stop_callback],
-        default_root_dir="lightning_logs",
-        enable_progress_bar=True,
-        enable_model_summary=True,
-        profiler="simple",  # シンプルプロファイラーを有効化
-    )
-
-    # トレーナー情報をログ出力
-    logger.info("=" * 30)
-    logger.info("Trainerの設定")
-    logger.info("=" * 30)
-    logger.info(f"最大エポック数: {trainer.max_epochs}")
-    logger.info(f"ログ出力間隔: {trainer.log_every_n_steps} ステップごと")
-    logger.info("チェックポイント保存: 有効")
-    logger.info("早期停止: 有効 (patience=10)")
-    logger.info("TensorBoardログ: lightning_logs/padim_training")
-    logger.info("=" * 30)
+    engine = Engine(max_epochs=max_epochs)
 
     # 学習実行
     logger.info("=" * 50)
@@ -496,22 +322,15 @@ def train_padim_model(
     logger.info("=" * 50)
     logger.info(f"学習開始時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(
-        f"使用デバイス: {trainer.device_ids if hasattr(trainer, 'device_ids') else 'auto'}"
+        f"使用デバイス: {engine.trainer.device_ids if hasattr(engine.trainer, 'device_ids') else 'auto'}"
     )
-    logger.info(f"アクセラレータ: {trainer.accelerator}")
-    logger.info(
-        f"学習データ量: {len(train_loader) if 'train_loader' in locals() else 'unknown'} バッチ"
-    )
-    logger.info(
-        f"検証データ量: {len(val_loader) if 'val_loader' in locals() else 'unknown'} バッチ"
-    )
+    logger.info(f"アクセラレータ: {engine.trainer.accelerator}")
     logger.info("モデルバックボーン: resnet18")
     logger.info("特徴抽出レイヤー: ['layer1', 'layer2', 'layer3']")
     logger.info("=" * 50)
 
-    # 学習実行（詳細ログ付き）
     try:
-        trainer.fit(model=model, datamodule=datamodule)
+        engine.fit(model=model, datamodule=datamodule)
         logger.info("=" * 50)
         logger.info("学習が正常に完了しました")
         logger.info(f"学習完了時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -530,24 +349,9 @@ def train_padim_model(
     logger.info(f"保存パス: {model_save_path}")
 
     try:
-        trainer.save_checkpoint(model_save_path)
+        engine.save_checkpoint(model_save_path)
         model_size = Path(model_save_path).stat().st_size / (1024 * 1024)  # MB
         logger.info(f"チェックポイント保存完了: {model_size:.2f} MB")
-
-        # 追加で.save()形式でも保存
-        save_dir = Path(model_save_path).parent / "padim_saved_model"
-        save_dir.mkdir(exist_ok=True)
-        model.model.save(str(save_dir))
-        logger.info(f"モデル（.save()形式）を保存しました: {save_dir}")
-
-        # 保存されたファイルの詳細情報
-        if Path(model_save_path).exists():
-            stat = Path(model_save_path).stat()
-            logger.info(f"モデルファイルサイズ: {stat.st_size / (1024 * 1024):.2f} MB")
-            logger.info(
-                f"保存日時: {datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-
         logger.info("=" * 30)
         logger.info("モデル保存完了")
         logger.info("=" * 30)
@@ -560,11 +364,6 @@ def train_padim_model(
         raise
 
     logger.info("🎉 PaDiMモデル学習が正常に完了しました 🎉")
-
-    # 一時学習ディレクトリを削除（オプション）
-    # main.pyでの推論高速化のため、temp_training_dataディレクトリを保持
-    logger.info(f"学習用ディレクトリを保持します（推論高速化のため）: {training_dir}")
-    # cleanup_training_dir(training_dir)  # コメントアウトして保持
 
 
 def main():
@@ -579,8 +378,8 @@ def main():
     parser.add_argument(
         "--model-path",
         type=str,
-        default="models/padim_model.ckpt",
-        help="モデル保存パス (default: models/padim_model.ckpt)",
+        default="models/padim_trained.ckpt",
+        help="モデル保存パス (default: models/padim_trained.ckpt)",
     )
     parser.add_argument(
         "--image-size",
@@ -706,7 +505,6 @@ def main():
             image_size=tuple(args.image_size),
             max_epochs=args.max_epochs,
             batch_size=args.batch_size,
-            num_workers=args.num_workers,
         )
 
         # --cleanupオプションが指定された場合のみディレクトリを削除
