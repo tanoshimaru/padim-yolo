@@ -362,12 +362,6 @@ def train_padim_model(
 
     try:
         engine.fit(model=model, datamodule=datamodule)
-
-        logger.info(
-            f"使用デバイス: {engine.trainer.device_ids if hasattr(engine.trainer, 'device_ids') else 'auto'}"
-        )
-        logger.info(f"アクセラレータ: {engine.trainer.accelerator}")
-
         logger.info("=" * 50)
         logger.info("学習が正常に完了しました")
         logger.info(f"学習完了時刻: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
