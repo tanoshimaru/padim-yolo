@@ -127,7 +127,7 @@ def setup_logging() -> logging.Logger:
 
     log_filename = f"train_padim_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler(log_dir / log_filename, encoding="utf-8"),
