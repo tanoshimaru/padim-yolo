@@ -292,19 +292,6 @@ def train_padim_model(
     """PaDiMモデルの学習"""
     logger = logging.getLogger(__name__)
 
-    # Jetson Orin GPU向けの最適化設定
-    if torch.cuda.is_available():
-        # Tensor Core最適化（Orin GPU向け）
-        torch.set_float32_matmul_precision("medium")
-        # GPU メモリ使用量を制限
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.deterministic = True
-        logger.info("Jetson Orin GPU向けの最適化設定を適用しました")
-        logger.info("- Tensor Core最適化: medium precision")
-        logger.info("- CUDNN設定: deterministic mode")
-    else:
-        logger.warning("CUDA が利用できません")
-
     # モデル保存ディレクトリを作成
     Path(model_save_path).parent.mkdir(parents=True, exist_ok=True)
 
