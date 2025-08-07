@@ -20,11 +20,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 import argparse
+import torch
+
 
 from anomalib.data import Folder
 from anomalib.engine import Engine
 from anomalib.models import Padim
 import shutil
+
+# Jetson Orin GPU向けの最適化設定
+torch.set_float32_matmul_precision("high")
 
 
 def create_unified_training_dir(
@@ -281,11 +286,24 @@ def train_padim_model(
     model_save_path: str = "models/padim_trained.ckpt",
     image_size: tuple = (224, 224),  # ResNet標準サイズ（最適な処理効率）
     max_epochs: int = 10,
-    batch_size: int = 8,
-    num_workers: int = 4,
+    batch_size: int = 4,  # Jetson向けに削減
+    num_workers: int = 2,  # Jetson向けに削減
 ) -> None:
     """PaDiMモデルの学習"""
     logger = logging.getLogger(__name__)
+
+    # Jetson Orin GPU向けの最適化設定
+    if torch.cuda.is_available():
+        # Tensor Core最適化（Orin GPU向け）
+        torch.set_float32_matmul_precision("medium")
+        # GPU メモリ使用量を制限
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+        logger.info("Jetson Orin GPU向けの最適化設定を適用しました")
+        logger.info("- Tensor Core最適化: medium precision")
+        logger.info("- CUDNN設定: deterministic mode")
+    else:
+        logger.warning("CUDA が利用できません")
 
     # モデル保存ディレクトリを作成
     Path(model_save_path).parent.mkdir(parents=True, exist_ok=True)
@@ -454,13 +472,16 @@ def main():
         "--max-epochs", type=int, default=100, help="最大エポック数 (default: 100)"
     )
     parser.add_argument(
-        "--batch-size", type=int, default=8, help="バッチサイズ (default: 8)"
+        "--batch-size",
+        type=int,
+        default=4,
+        help="バッチサイズ (default: 4 - Jetson最適化)",
     )
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=4,
-        help="データローダーのワーカー数 (default: 4)",
+        default=2,
+        help="データローダーのワーカー数 (default: 2 - Jetson最適化)",
     )
     parser.add_argument(
         "--check-only", action="store_true", help="データ構造のチェックのみ実行"
@@ -567,6 +588,7 @@ def main():
             image_size=tuple(args.image_size),
             max_epochs=args.max_epochs,
             batch_size=args.batch_size,
+            num_workers=args.num_workers,
         )
 
         # --cleanupオプションが指定された場合のみディレクトリを削除
