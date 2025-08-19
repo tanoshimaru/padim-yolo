@@ -385,7 +385,7 @@ def train_padim_model(
     logger.info(f"保存パス: {model_save_path}")
 
     try:
-        engine.save_checkpoint(model_save_path)
+        engine.trainer.save_checkpoint(model_save_path)
         model_size = Path(model_save_path).stat().st_size / (1024 * 1024)  # MB
         logger.info(f"チェックポイント保存完了: {model_size:.2f} MB")
         logger.info("=" * 30)
