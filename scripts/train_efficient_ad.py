@@ -242,7 +242,7 @@ def create_efficientad_model(
 
 
 def create_test_datamodule(
-    images_dir: str, image_size: tuple = (256, 256), batch_size: int = 8
+    images_dir: str, image_size: tuple = (256, 256), batch_size: int = 1
 ) -> Folder:
     """test用のdatamoduleを作成"""
     logger = logging.getLogger(__name__)
@@ -276,7 +276,7 @@ def train_efficientad_model(
     model_save_path: str = "models/efficientad_trained.ckpt",
     image_size: tuple = (256, 256),  # EfficientAd推奨サイズ
     max_epochs: int = 10,
-    batch_size: int = 4,  # Jetson向けに削減
+    batch_size: int = 1,  # EfficientAd最適化
     num_workers: int = 2,  # Jetson向けに削減
 ) -> None:
     """EfficientAdモデルの学習"""
@@ -446,8 +446,8 @@ def main():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=4,
-        help="バッチサイズ (default: 4 - Jetson最適化)",
+        default=1,
+        help="バッチサイズ (default: 1 - EfficientAd最適化)",
     )
     parser.add_argument(
         "--num-workers",
