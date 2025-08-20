@@ -232,11 +232,7 @@ def create_efficientad_model(
     image_size: tuple = (256, 256),  # EfficientAd推奨サイズ
 ) -> EfficientAd:
     """EfficientAdモデルの作成"""
-    pre_processor = EfficientAd.configure_pre_processor(image_size=image_size)
-
-    model = EfficientAd(
-        pre_processor=pre_processor,
-    )
+    model = EfficientAd()
 
     return model
 
