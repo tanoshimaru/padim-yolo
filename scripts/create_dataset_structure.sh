@@ -40,7 +40,7 @@ for grid_dir in "$SOURCE_DIR"/grid_*; do
                 filename=$(basename "$img")
                 grid_name=$(basename "$grid_dir")
                 target_name="${grid_name}_${filename}"
-                convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/train/good/$target_name"
+                nonexistent_command "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/train/good/$target_name"
                 ((train_count++))
             fi
         done
