@@ -40,7 +40,7 @@ for grid_dir in "$SOURCE_DIR"/grid_*; do
                 filename=$(basename "$img")
                 grid_name=$(basename "$grid_dir")
                 target_name="${grid_name}_${filename}"
-                magick "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/train/good/$target_name"
+                convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/train/good/$target_name"
                 ((train_count++))
             fi
         done
@@ -54,7 +54,7 @@ if [ -d "$SOURCE_DIR/no_person" ]; then
         if [ -f "$img" ]; then
             filename=$(basename "$img")
             target_name="no_person_${filename}"
-            magick "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/train/good/$target_name"
+            convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/train/good/$target_name"
             ((train_count++))
         fi
     done
@@ -70,7 +70,7 @@ if [ -d "$SOURCE_DIR/test/normal" ]; then
     for img in "$SOURCE_DIR/test/normal"/*.{jpg,jpeg,png,bmp,tiff,tif}; do
         if [ -f "$img" ]; then
             filename=$(basename "$img")
-            magick "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/test/good/$filename"
+            convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/test/good/$filename"
             ((test_good_count++))
         fi
     done
@@ -86,7 +86,7 @@ if [ -d "$SOURCE_DIR/test/anomaly" ]; then
     for img in "$SOURCE_DIR/test/anomaly"/*.{jpg,jpeg,png,bmp,tiff,tif}; do
         if [ -f "$img" ]; then
             filename=$(basename "$img")
-            magick "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/test/defect/$filename"
+            convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/test/defect/$filename"
             ((test_defect_count++))
         fi
     done
