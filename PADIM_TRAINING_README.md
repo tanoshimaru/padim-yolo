@@ -44,7 +44,7 @@ python train_padim.py
 # 詳細オプション付き
 python train_padim.py \
     --data_root ./training_data \
-    --model_save_path ./models/padim_model.ckpt \
+    --model_save_path ./models/padim_trained.ckpt \
     --batch_size 32 \
     --max_epochs 10 \
     --backbone resnet18
@@ -55,7 +55,7 @@ python train_padim.py \
 - `--data_root`: 学習データディレクトリ（デフォルト: `./training_data`）
 - `--normal_dir`: 正常画像ディレクトリ名（デフォルト: `normal`）
 - `--abnormal_dir`: 異常画像ディレクトリ名（デフォルト: `abnormal`）
-- `--model_save_path`: モデル保存パス（デフォルト: `./models/padim_model.ckpt`）
+- `--model_save_path`: モデル保存パス（デフォルト: `./models/padim_trained.ckpt`）
 - `--image_size`: 入力画像サイズ（デフォルト: 256 256）
 - `--batch_size`: バッチサイズ（デフォルト: 32）
 - `--max_epochs`: 最大エポック数（デフォルト: 1）
@@ -86,7 +86,7 @@ training_data/
 
 ## 学習されたモデルの使用
 
-学習が完了すると、`models/padim_model.ckpt`にモデルが保存されます。
+学習が完了すると、`models/padim_trained.ckpt`にモデルが保存されます。
 `main.py`は自動的にこのモデルを読み込んで使用します。
 
 ```bash

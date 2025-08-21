@@ -96,7 +96,7 @@ class AdditionalTrainer:
     def create_model(self) -> Padim:
         """PaDiMモデルの作成"""
         # 既存モデルがある場合は読み込み、ない場合は新規作成
-        existing_model_path = self.models_dir / "padim_model.ckpt"
+        existing_model_path = self.models_dir / "padim_trained.ckpt"
 
         if existing_model_path.exists():
             try:
@@ -188,8 +188,8 @@ class AdditionalTrainer:
             self.logger.info("=" * 30)
             
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            model_save_path = self.models_dir / f"padim_model_{timestamp}.ckpt"
-            latest_model_path = self.models_dir / "padim_model.ckpt"
+            model_save_path = self.models_dir / f"padim_trained_{timestamp}.ckpt"
+            latest_model_path = self.models_dir / "padim_trained.ckpt"
             
             try:
                 # チェックポイント保存
@@ -256,7 +256,7 @@ class AdditionalTrainer:
             info["models"].append(model_info)
 
         # 最新モデルファイルがあるかチェック
-        latest_model = self.models_dir / "padim_model.ckpt"
+        latest_model = self.models_dir / "padim_trained.ckpt"
         if latest_model.exists():
             info["latest_model"] = str(latest_model)
 

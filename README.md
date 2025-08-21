@@ -170,7 +170,7 @@ python run_daily.py
 
 - 初回実行時は未学習モデルを使用
 - 土曜日の追加学習でモデルが更新される
-- 学習済みモデルは`models/padim_model.ckpt`に保存
+- 学習済みモデルは`models/padim_trained.ckpt`に保存
 
 ### RTSP カメラ設定
 

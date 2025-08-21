@@ -54,7 +54,7 @@ def setup_logging():
 class PaDiMAnomalyDetector:
     """PaDiM 異常検知クラス"""
 
-    def __init__(self, model_path: str = "models/padim_model.ckpt"):
+    def __init__(self, model_path: str = "models/padim_trained.ckpt"):
         self.model_path = model_path
         self.model = None
         self.engine = None
