@@ -335,6 +335,45 @@ def train_padim_model(
         logger.info("データモジュールをセットアップ中...")
         datamodule.setup()
         logger.info("データモジュールのセットアップが完了しました")
+        
+        # データモジュールの詳細情報を表示
+        logger.info("=" * 40)
+        logger.info("データモジュール内訳")
+        logger.info("=" * 40)
+        
+        try:
+            if hasattr(datamodule, 'train_dataset') and datamodule.train_dataset:
+                train_size = len(datamodule.train_dataset)
+                logger.info(f"学習用データセット: {train_size} 枚")
+            
+            if hasattr(datamodule, 'val_dataset') and datamodule.val_dataset:
+                val_size = len(datamodule.val_dataset)
+                logger.info(f"検証用データセット: {val_size} 枚")
+            
+            if hasattr(datamodule, 'test_dataset') and datamodule.test_dataset:
+                test_size = len(datamodule.test_dataset)
+                logger.info(f"テスト用データセット: {test_size} 枚")
+            
+            # データローダーの情報
+            if hasattr(datamodule, 'train_dataloader'):
+                train_loader = datamodule.train_dataloader()
+                if train_loader:
+                    logger.info(f"学習用バッチ数: {len(train_loader)} バッチ")
+            
+            if hasattr(datamodule, 'val_dataloader'):
+                val_loader = datamodule.val_dataloader()
+                if val_loader:
+                    logger.info(f"検証用バッチ数: {len(val_loader)} バッチ")
+            
+            if hasattr(datamodule, 'test_dataloader'):
+                test_loader = datamodule.test_dataloader()
+                if test_loader:
+                    logger.info(f"テスト用バッチ数: {len(test_loader)} バッチ")
+                    
+        except Exception as e:
+            logger.warning(f"データモジュール情報の取得に失敗: {e}")
+        
+        logger.info("=" * 40)
 
     except Exception as e:
         logger.error(f"データセットの準備に失敗: {e}")
