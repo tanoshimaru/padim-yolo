@@ -307,11 +307,8 @@ def train_padim_model(
             normal_dir="train/good",
             abnormal_dir="test/defect",
             train_batch_size=batch_size,
-            eval_batch_size=batch_size,
             num_workers=num_workers,
-            test_split_mode="from_dir",
             test_split_ratio=0.0,
-            val_split_mode="from_dir", 
             val_split_ratio=0.0,
         )
         logger.info(f"Folderデータモジュールを作成しました (num_workers={num_workers})")
