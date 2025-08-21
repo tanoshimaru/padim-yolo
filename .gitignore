@@ -17,6 +17,6 @@ images
 logs
 results
 temp_training_data
-temp_training_data_efficient_ad
-temp_training_data_padim
+temp_training_data_224x224
+temp_training_data_256x256
 tmp
