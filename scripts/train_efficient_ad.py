@@ -43,11 +43,10 @@ def create_unified_training_dir(
 
     training_path = Path(training_dir)
     normal_dir = training_path / "normal"
-    abnormal_dir = training_path / "anomaly"
 
     # 既存ディレクトリがある場合、リサイズ済みかどうかを確認
     if normal_dir.exists():
-        existing_images = list(normal_dir.glob("*")) + list(abnormal_dir.glob("*"))
+        existing_images = list(normal_dir.glob("*"))
         existing_image_files = [
             f
             for f in existing_images
@@ -310,10 +309,11 @@ def train_efficientad_model(
             name="efficientad_training",
             root=training_root,
             normal_dir="normal",
-            abnormal_dir="anomaly",
             train_batch_size=batch_size,
             eval_batch_size=batch_size,
             num_workers=num_workers,
+            val_split_ratio=0.2,
+            test_split_ratio=0.0,  # 学習用なのでtestは使用しない
         )
         logger.info(f"Folderデータモジュールを作成しました (num_workers={num_workers})")
 
