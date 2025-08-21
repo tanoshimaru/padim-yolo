@@ -6,8 +6,6 @@
 # グロブパターンがマッチしない場合でもエラーにならないようにする
 shopt -s nullglob
 
-# エラーが発生しても継続実行
-
 SOURCE_DIR="$1"
 TARGET_DIR="$2"
 IMAGE_SIZE="$3"
@@ -41,7 +39,8 @@ echo "train/good に正常画像をコピー中..."
 train_count=0
 
 # grid_XX ディレクトリから学習用正常画像をコピー
-for grid_dir in "$SOURCE_DIR"/grid_*; do
+for i in {00..15}; do
+    grid_dir="$SOURCE_DIR/grid_$i"
     if [ -d "$grid_dir" ]; then
         echo "処理中: $grid_dir"
         image_found=0
