@@ -44,9 +44,11 @@ train_count=0
 for grid_dir in "$SOURCE_DIR"/grid_*; do
     if [ -d "$grid_dir" ]; then
         echo "処理中: $grid_dir"
+        image_found=0
         for img in "$grid_dir"/*.{jpg,jpeg,png,bmp,tiff,tif}; do
             # グロブパターンがマッチしない場合をスキップ
             [ -f "$img" ] || continue
+            image_found=1
             filename=$(basename "$img")
             grid_name=$(basename "$grid_dir")
             target_name="${grid_name}_${filename}"
@@ -58,15 +60,20 @@ for grid_dir in "$SOURCE_DIR"/grid_*; do
                 echo "警告: $img のリサイズに失敗しました"
             fi
         done
+        if [ $image_found -eq 0 ]; then
+            echo "  → 画像ファイルが見つかりませんでした"
+        fi
     fi
 done
 
 # no_person ディレクトリから学習用正常画像をコピー
 if [ -d "$SOURCE_DIR/no_person" ]; then
     echo "処理中: $SOURCE_DIR/no_person"
+    image_found=0
     for img in "$SOURCE_DIR/no_person"/*.{jpg,jpeg,png,bmp,tiff,tif}; do
         # グロブパターンがマッチしない場合をスキップ
         [ -f "$img" ] || continue
+        image_found=1
         filename=$(basename "$img")
         target_name="no_person_${filename}"
         
@@ -77,6 +84,11 @@ if [ -d "$SOURCE_DIR/no_person" ]; then
             echo "警告: $img のリサイズに失敗しました"
         fi
     done
+    if [ $image_found -eq 0 ]; then
+        echo "  → 画像ファイルが見つかりませんでした"
+    fi
+else
+    echo "no_personディレクトリが見つかりません"
 fi
 
 echo "train/good: $train_count 画像"
@@ -86,9 +98,11 @@ total_images=$((total_images + train_count))
 test_good_count=0
 if [ -d "$SOURCE_DIR/test/normal" ]; then
     echo "test/good に正常テスト画像をコピー中..."
+    image_found=0
     for img in "$SOURCE_DIR/test/normal"/*.{jpg,jpeg,png,bmp,tiff,tif}; do
         # グロブパターンがマッチしない場合をスキップ
         [ -f "$img" ] || continue
+        image_found=1
         filename=$(basename "$img")
         
         # ImageMagickでリサイズしながらコピー
@@ -98,6 +112,11 @@ if [ -d "$SOURCE_DIR/test/normal" ]; then
             echo "警告: $img のリサイズに失敗しました"
         fi
     done
+    if [ $image_found -eq 0 ]; then
+        echo "  → 画像ファイルが見つかりませんでした"
+    fi
+else
+    echo "test/normalディレクトリが見つかりません"
 fi
 
 echo "test/good: $test_good_count 画像"
@@ -107,9 +126,11 @@ total_images=$((total_images + test_good_count))
 test_defect_count=0
 if [ -d "$SOURCE_DIR/test/anomaly" ]; then
     echo "test/defect に異常テスト画像をコピー中..."
+    image_found=0
     for img in "$SOURCE_DIR/test/anomaly"/*.{jpg,jpeg,png,bmp,tiff,tif}; do
         # グロブパターンがマッチしない場合をスキップ
         [ -f "$img" ] || continue
+        image_found=1
         filename=$(basename "$img")
         
         # ImageMagickでリサイズしながらコピー
@@ -119,6 +140,11 @@ if [ -d "$SOURCE_DIR/test/anomaly" ]; then
             echo "警告: $img のリサイズに失敗しました"
         fi
     done
+    if [ $image_found -eq 0 ]; then
+        echo "  → 画像ファイルが見つかりませんでした"
+    fi
+else
+    echo "test/anomalyディレクトリが見つかりません"
 fi
 
 echo "test/defect: $test_defect_count 画像"
