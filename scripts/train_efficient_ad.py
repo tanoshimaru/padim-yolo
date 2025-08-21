@@ -33,20 +33,27 @@ torch.set_float32_matmul_precision("high")
 
 def create_unified_training_dir(
     images_dir: str,
-    training_dir: str = "temp_training_data_256x256",
+    training_dir: str = "dataset",
     image_size: tuple = (256, 256),
 ) -> tuple:
-    """全ての正常画像を統合した一時的な学習ディレクトリを作成（シェルスクリプト使用）"""
+    """全ての正常画像を統合した学習ディレクトリを作成（シェルスクリプト使用）"""
     import subprocess
 
     logger = logging.getLogger(__name__)
 
     training_path = Path(training_dir)
-    normal_dir = training_path / "normal"
+    train_good_dir = training_path / "train" / "good"
+    test_good_dir = training_path / "test" / "good"
+    test_defect_dir = training_path / "test" / "defect"
 
     # 既存ディレクトリがある場合、リサイズ済みかどうかを確認
-    if normal_dir.exists():
-        existing_images = list(normal_dir.glob("*"))
+    if train_good_dir.exists():
+        existing_images = list(train_good_dir.glob("*"))
+        if test_good_dir.exists():
+            existing_images.extend(list(test_good_dir.glob("*")))
+        if test_defect_dir.exists():
+            existing_images.extend(list(test_defect_dir.glob("*")))
+        
         existing_image_files = [
             f
             for f in existing_images
@@ -83,10 +90,10 @@ def create_unified_training_dir(
         else:
             logger.info("既存ディレクトリは空です - 新規作成")
     else:
-        logger.info("新規でtemp_training_data_256x256ディレクトリを作成")
+        logger.info("新規でdatasetディレクトリを作成")
 
     # シェルスクリプトで高速リサイズ&コピーを実行
-    script_path = Path(__file__).parent / "copy_training_images_resized.sh"
+    script_path = Path(__file__).parent / "create_dataset_structure.sh"
     target_size = f"{image_size[0]}x{image_size[1]}"  # 256x256形式
     try:
         result = subprocess.run(
@@ -110,18 +117,18 @@ def create_unified_training_dir(
         logger.error("シェルスクリプトからの出力解析エラー")
         return str(training_path), 0
 
-    logger.info(f"統合された学習用正常画像: {total_images} 枚")
+    logger.info(f"データセット作成完了: {total_images} 枚")
     return str(training_path), total_images
 
 
 def cleanup_training_dir(training_dir: str):
-    """学習用一時ディレクトリを削除"""
+    """学習用データセットディレクトリを削除"""
     logger = logging.getLogger(__name__)
 
     training_path = Path(training_dir)
     if training_path.exists():
         shutil.rmtree(training_path)
-        logger.info(f"一時学習ディレクトリを削除しました: {training_dir}")
+        logger.info(f"データセットディレクトリを削除しました: {training_dir}")
 
 
 def setup_logging() -> logging.Logger:
@@ -236,34 +243,6 @@ def create_efficientad_model(
     return model
 
 
-def create_test_datamodule(
-    images_dir: str, batch_size: int = 1
-) -> Folder:
-    """test用のdatamoduleを作成"""
-    logger = logging.getLogger(__name__)
-
-    images_path = Path(images_dir)
-    test_dir = images_path / "test"
-
-    if not test_dir.exists():
-        logger.warning("testディレクトリが見つかりません")
-        return None
-
-    # test用datamoduleを作成
-    test_datamodule = Folder(
-        name="efficientad_test",
-        root=str(test_dir),
-        normal_dir="normal",
-        abnormal_dir="anomaly",
-        train_batch_size=batch_size,
-        eval_batch_size=batch_size,
-        num_workers=0,
-        val_split_ratio=0.0,  # testデータなので分割しない
-        test_split_ratio=1.0,  # 全てをtestデータとして使用
-    )
-
-    logger.info(f"test用datamoduleを作成: {test_dir}")
-    return test_datamodule
 
 
 def train_efficientad_model(
@@ -287,41 +266,55 @@ def train_efficientad_model(
     logger.info(f"バッチサイズ: {batch_size}")
     logger.info(f"ワーカー数: {num_workers}")
 
-    # 統合学習ディレクトリを作成または再利用
-    training_dir = "temp_training_data_256x256"
+    # データセットディレクトリを作成または再利用
+    training_dir = "dataset"
 
     try:
-        # 全画像を統合した一時ディレクトリを作成（既存の場合は再利用）
+        # データセットを作成（既存の場合は再利用）
         training_root, total_images = create_unified_training_dir(
             images_dir, training_dir, image_size
         )
 
         if total_images == 0:
-            logger.error("学習に使用できる正常画像が見つかりません")
+            logger.error("学習に使用できる画像が見つかりません")
             logger.info("以下のディレクトリに画像を配置してください:")
             logger.info("  - images/grid_00 〜 images/grid_15 (人が写っている正常画像)")
             logger.info("  - images/no_person (人が写っていない正常画像)")
+            logger.info("  - images/test/normal (正常なテスト画像)")
+            logger.info("  - images/test/anomaly (異常なテスト画像)")
             cleanup_training_dir(training_dir)
             return
 
-        # Folderデータモジュールを使用（学習は正常画像のみ）
+        # Folderデータモジュールを使用（dataset/train/good、dataset/test/good、dataset/test/defect）
         datamodule = Folder(
             name="efficientad_training",
             root=training_root,
-            normal_dir="normal",
+            normal_dir="train/good",
+            abnormal_dir="test/defect",
             train_batch_size=batch_size,
             eval_batch_size=batch_size,
             num_workers=num_workers,
-            val_split_ratio=0.2,
-            test_split_ratio=0.0,  # 学習用なのでtestは使用しない
+            test_split_mode="from_dir",
+            test_split_ratio=0.0,
+            val_split_mode="from_dir", 
+            val_split_ratio=0.0,
         )
         logger.info(f"Folderデータモジュールを作成しました (num_workers={num_workers})")
 
         # 実際のファイル数を先に確認
-        actual_files = len(
-            [f for f in (Path(training_root) / "normal").iterdir() if f.is_file()]
+        train_files = len(
+            [f for f in (Path(training_root) / "train" / "good").iterdir() if f.is_file()]
         )
-        logger.info(f"temp_training_data_256x256/normal内の実際のファイル数: {actual_files}")
+        test_good_files = len(
+            [f for f in (Path(training_root) / "test" / "good").iterdir() if f.is_file()]
+        ) if (Path(training_root) / "test" / "good").exists() else 0
+        test_defect_files = len(
+            [f for f in (Path(training_root) / "test" / "defect").iterdir() if f.is_file()]
+        ) if (Path(training_root) / "test" / "defect").exists() else 0
+        
+        logger.info(f"dataset/train/good内の実際のファイル数: {train_files}")
+        logger.info(f"dataset/test/good内の実際のファイル数: {test_good_files}")
+        logger.info(f"dataset/test/defect内の実際のファイル数: {test_defect_files}")
 
         # データモジュールをセットアップ
         logger.info("データモジュールをセットアップ中...")
@@ -379,32 +372,20 @@ def train_efficientad_model(
         logger.error("=" * 30)
         raise
 
-    # test実行
+    # テストは既存のdatamoduleで実行
     logger.info("=" * 30)
     logger.info("テスト開始")
     logger.info("=" * 30)
 
     try:
-        # test用datamoduleを作成
-        test_datamodule = create_test_datamodule(images_dir, batch_size)
+        # testを実行
+        logger.info("テスト実行中...")
+        test_results = engine.test(model=model, datamodule=datamodule)
 
-        if test_datamodule is not None:
-            # testデータをセットアップ
-            test_datamodule.setup()
-
-            # testを実行
-            logger.info("テスト実行中...")
-            model = EfficientAd.load_from_checkpoint(model_save_path)
-            test_results = engine.test(model=model, datamodule=test_datamodule)
-
-            logger.info("=" * 30)
-            logger.info("テスト完了")
-            logger.info(f"テスト結果: {test_results}")
-            logger.info("=" * 30)
-        else:
-            logger.warning(
-                "test用datamoduleの作成に失敗したため、テストをスキップします"
-            )
+        logger.info("=" * 30)
+        logger.info("テスト完了")
+        logger.info(f"テスト結果: {test_results}")
+        logger.info("=" * 30)
 
     except Exception as e:
         logger.error(f"テスト実行中にエラーが発生: {e}")
@@ -456,12 +437,12 @@ def main():
     parser.add_argument(
         "--cleanup",
         action="store_true",
-        help="学習後にtemp_training_data_256x256ディレクトリを削除",
+        help="学習後にdatasetディレクトリを削除",
     )
     parser.add_argument(
         "--force-recreate",
         action="store_true",
-        help="既存のtemp_training_data_256x256ディレクトリを強制的に再作成",
+        help="既存のdatasetディレクトリを強制的に再作成",
     )
 
     args = parser.parse_args()
@@ -542,10 +523,10 @@ def main():
             return 1
 
         # --force-recreateオプションが指定された場合は既存ディレクトリを削除
-        if args.force_recreate and Path("temp_training_data_256x256").exists():
-            cleanup_training_dir("temp_training_data_256x256")
+        if args.force_recreate and Path("dataset").exists():
+            cleanup_training_dir("dataset")
             logger.info(
-                "--force-recreateオプションにより、既存のtemp_training_data_256x256ディレクトリを削除しました"
+                "--force-recreateオプションにより、既存のdatasetディレクトリを削除しました"
             )
 
         # モデル学習の実行
@@ -560,9 +541,9 @@ def main():
 
         # --cleanupオプションが指定された場合のみディレクトリを削除
         if args.cleanup:
-            cleanup_training_dir("temp_training_data_256x256")
+            cleanup_training_dir("dataset")
             logger.info(
-                "--cleanupオプションにより、temp_training_data_256x256ディレクトリを削除しました"
+                "--cleanupオプションにより、datasetディレクトリを削除しました"
             )
 
         logger.info("すべての処理が完了しました")
