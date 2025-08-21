@@ -6,7 +6,7 @@
 # グロブパターンがマッチしない場合でもエラーにならないようにする
 shopt -s nullglob
 
-set -e
+# エラーが発生しても継続実行
 
 SOURCE_DIR="$1"
 TARGET_DIR="$2"
