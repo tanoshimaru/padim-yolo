@@ -18,3 +18,5 @@ images
 logs
 results
 tmp
+
+padim_trained.pkl
