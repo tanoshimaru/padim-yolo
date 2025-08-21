@@ -3,6 +3,9 @@
 # EfficientAd用データセット構成作成スクリプト
 # 使用法: ./create_dataset_structure.sh <source_images_dir> <target_dataset_dir> <image_size>
 
+# グロブパターンがマッチしない場合でもエラーにならないようにする
+shopt -s nullglob
+
 set -e
 
 SOURCE_DIR="$1"
@@ -12,6 +15,12 @@ IMAGE_SIZE="$3"
 if [ "$#" -ne 3 ]; then
     echo "使用法: $0 <source_images_dir> <target_dataset_dir> <image_size>"
     echo "例: $0 images dataset 256x256"
+    exit 1
+fi
+
+# ImageMagickの存在確認
+if ! command -v convert &> /dev/null; then
+    echo "エラー: ImageMagickが見つかりません。インストールしてください。"
     exit 1
 fi
 
@@ -36,12 +45,17 @@ for grid_dir in "$SOURCE_DIR"/grid_*; do
     if [ -d "$grid_dir" ]; then
         echo "処理中: $grid_dir"
         for img in "$grid_dir"/*.{jpg,jpeg,png,bmp,tiff,tif}; do
-            if [ -f "$img" ]; then
-                filename=$(basename "$img")
-                grid_name=$(basename "$grid_dir")
-                target_name="${grid_name}_${filename}"
-                convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/train/good/$target_name"
+            # グロブパターンがマッチしない場合をスキップ
+            [ -f "$img" ] || continue
+            filename=$(basename "$img")
+            grid_name=$(basename "$grid_dir")
+            target_name="${grid_name}_${filename}"
+            
+            # ImageMagickでリサイズしながらコピー
+            if convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/train/good/$target_name" 2>/dev/null; then
                 ((train_count++))
+            else
+                echo "警告: $img のリサイズに失敗しました"
             fi
         done
     fi
@@ -51,11 +65,16 @@ done
 if [ -d "$SOURCE_DIR/no_person" ]; then
     echo "処理中: $SOURCE_DIR/no_person"
     for img in "$SOURCE_DIR/no_person"/*.{jpg,jpeg,png,bmp,tiff,tif}; do
-        if [ -f "$img" ]; then
-            filename=$(basename "$img")
-            target_name="no_person_${filename}"
-            convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/train/good/$target_name"
+        # グロブパターンがマッチしない場合をスキップ
+        [ -f "$img" ] || continue
+        filename=$(basename "$img")
+        target_name="no_person_${filename}"
+        
+        # ImageMagickでリサイズしながらコピー
+        if convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/train/good/$target_name" 2>/dev/null; then
             ((train_count++))
+        else
+            echo "警告: $img のリサイズに失敗しました"
         fi
     done
 fi
@@ -68,10 +87,15 @@ test_good_count=0
 if [ -d "$SOURCE_DIR/test/normal" ]; then
     echo "test/good に正常テスト画像をコピー中..."
     for img in "$SOURCE_DIR/test/normal"/*.{jpg,jpeg,png,bmp,tiff,tif}; do
-        if [ -f "$img" ]; then
-            filename=$(basename "$img")
-            convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/test/good/$filename"
+        # グロブパターンがマッチしない場合をスキップ
+        [ -f "$img" ] || continue
+        filename=$(basename "$img")
+        
+        # ImageMagickでリサイズしながらコピー
+        if convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/test/good/$filename" 2>/dev/null; then
             ((test_good_count++))
+        else
+            echo "警告: $img のリサイズに失敗しました"
         fi
     done
 fi
@@ -84,10 +108,15 @@ test_defect_count=0
 if [ -d "$SOURCE_DIR/test/anomaly" ]; then
     echo "test/defect に異常テスト画像をコピー中..."
     for img in "$SOURCE_DIR/test/anomaly"/*.{jpg,jpeg,png,bmp,tiff,tif}; do
-        if [ -f "$img" ]; then
-            filename=$(basename "$img")
-            convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/test/defect/$filename"
+        # グロブパターンがマッチしない場合をスキップ
+        [ -f "$img" ] || continue
+        filename=$(basename "$img")
+        
+        # ImageMagickでリサイズしながらコピー
+        if convert "$img" -resize "$IMAGE_SIZE!" "$TARGET_DIR/test/defect/$filename" 2>/dev/null; then
             ((test_defect_count++))
+        else
+            echo "警告: $img のリサイズに失敗しました"
         fi
     done
 fi
