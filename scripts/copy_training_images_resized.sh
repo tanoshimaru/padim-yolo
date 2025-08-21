@@ -6,7 +6,7 @@
 shopt -s nullglob
 
 IMAGES_DIR="${1:-images}"
-TRAINING_DIR="${2:-temp_training_data}"
+TRAINING_DIR="${2:-temp_training_data_224x224}"
 TARGET_SIZE="${3:-224x224}"
 NORMAL_DIR="${TRAINING_DIR}/normal"
 

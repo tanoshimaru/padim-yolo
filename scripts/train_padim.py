@@ -34,7 +34,7 @@ torch.set_float32_matmul_precision("high")
 
 def create_unified_training_dir(
     images_dir: str,
-    training_dir: str = "temp_training_data",
+    training_dir: str = "temp_training_data_224x224",
     image_size: tuple = (224, 224),
 ) -> tuple:
     """全ての正常画像を統合した一時的な学習ディレクトリを作成（シェルスクリプト使用）"""
@@ -84,7 +84,7 @@ def create_unified_training_dir(
         else:
             logger.info("既存ディレクトリは空です - 新規作成")
     else:
-        logger.info("新規でtemp_training_dataディレクトリを作成")
+        logger.info("新規でtemp_training_data_224x224ディレクトリを作成")
 
     # シェルスクリプトで高速リサイズ&コピーを実行
     script_path = Path(__file__).parent / "copy_training_images_resized.sh"
@@ -303,7 +303,7 @@ def train_padim_model(
     logger.info(f"ワーカー数: {num_workers}")
 
     # 統合学習ディレクトリを作成または再利用
-    training_dir = "temp_training_data"
+    training_dir = "temp_training_data_224x224"
 
     try:
         # 全画像を統合した一時ディレクトリを作成（既存の場合は再利用）
@@ -336,7 +336,7 @@ def train_padim_model(
         actual_files = len(
             [f for f in (Path(training_root) / "normal").iterdir() if f.is_file()]
         )
-        logger.info(f"temp_training_data/normal内の実際のファイル数: {actual_files}")
+        logger.info(f"temp_training_data_224x224/normal内の実際のファイル数: {actual_files}")
 
         # データモジュールをセットアップ
         logger.info("データモジュールをセットアップ中...")
@@ -476,12 +476,12 @@ def main():
     parser.add_argument(
         "--cleanup",
         action="store_true",
-        help="学習後にtemp_training_dataディレクトリを削除",
+        help="学習後にtemp_training_data_224x224ディレクトリを削除",
     )
     parser.add_argument(
         "--force-recreate",
         action="store_true",
-        help="既存のtemp_training_dataディレクトリを強制的に再作成",
+        help="既存のtemp_training_data_224x224ディレクトリを強制的に再作成",
     )
 
     args = parser.parse_args()
@@ -562,10 +562,10 @@ def main():
             return 1
 
         # --force-recreateオプションが指定された場合は既存ディレクトリを削除
-        if args.force_recreate and Path("temp_training_data").exists():
-            cleanup_training_dir("temp_training_data")
+        if args.force_recreate and Path("temp_training_data_224x224").exists():
+            cleanup_training_dir("temp_training_data_224x224")
             logger.info(
-                "--force-recreateオプションにより、既存のtemp_training_dataディレクトリを削除しました"
+                "--force-recreateオプションにより、既存のtemp_training_data_224x224ディレクトリを削除しました"
             )
 
         # モデル学習の実行
@@ -580,9 +580,9 @@ def main():
 
         # --cleanupオプションが指定された場合のみディレクトリを削除
         if args.cleanup:
-            cleanup_training_dir("temp_training_data")
+            cleanup_training_dir("temp_training_data_224x224")
             logger.info(
-                "--cleanupオプションにより、temp_training_dataディレクトリを削除しました"
+                "--cleanupオプションにより、temp_training_data_224x224ディレクトリを削除しました"
             )
 
         logger.info("すべての処理が完了しました")

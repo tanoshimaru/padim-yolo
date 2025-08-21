@@ -5,7 +5,7 @@
 shopt -s nullglob
 
 IMAGES_DIR="${1:-images}"
-TRAINING_DIR="${2:-temp_training_data}"
+TRAINING_DIR="${2:-temp_training_data_224x224}"
 NORMAL_DIR="${TRAINING_DIR}/normal"
 
 # ディレクトリ作成
