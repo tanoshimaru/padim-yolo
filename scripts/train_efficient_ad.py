@@ -229,16 +229,16 @@ def get_training_info(images_dir: str) -> tuple:
 
 
 def create_efficientad_model(
-    image_size: tuple = (256, 256),  # EfficientAd推奨サイズ
 ) -> EfficientAd:
     """EfficientAdモデルの作成"""
     model = EfficientAd()
-
+    if not Path("pre_trained/efficientad_pretrained_weights/pretrained_teacher_small.pth").exists():
+        model.prepare_pretrained_model()
     return model
 
 
 def create_test_datamodule(
-    images_dir: str, image_size: tuple = (256, 256), batch_size: int = 1
+    images_dir: str, batch_size: int = 1
 ) -> Folder:
     """test用のdatamoduleを作成"""
     logger = logging.getLogger(__name__)
@@ -335,7 +335,7 @@ def train_efficientad_model(
 
     # モデルの準備（画像サイズを明示的に指定）
     logger.info(f"EfficientAdモデルを作成中（画像サイズ: {image_size}）")
-    model = create_efficientad_model(image_size=image_size)
+    model = create_efficientad_model()
     engine = Engine(max_epochs=max_epochs)
 
     # 学習実行
@@ -387,7 +387,7 @@ def train_efficientad_model(
 
     try:
         # test用datamoduleを作成
-        test_datamodule = create_test_datamodule(images_dir, image_size, batch_size)
+        test_datamodule = create_test_datamodule(images_dir, batch_size)
 
         if test_datamodule is not None:
             # testデータをセットアップ
