@@ -34,7 +34,7 @@ torch.set_float32_matmul_precision("high")
 
 def create_unified_training_dir(
     images_dir: str,
-    training_dir: str = "dataset",
+    training_dir: str = "/mnt/ssd/dataset",
     image_size: tuple = (224, 224),
 ) -> tuple:
     """全ての正常画像を統合した学習ディレクトリを作成（シェルスクリプト使用）"""
@@ -282,7 +282,7 @@ def train_padim_model(
     logger.info(f"ワーカー数: {num_workers}")
 
     # データセットディレクトリを作成または再利用
-    training_dir = "dataset"
+    training_dir = "/mnt/ssd/dataset"
 
     try:
         # データセットを作成（既存の場合は再利用）
@@ -579,10 +579,10 @@ def main():
             return 1
 
         # --force-recreateオプションが指定された場合は既存ディレクトリを削除
-        if args.force_recreate and Path("dataset").exists():
-            cleanup_training_dir("dataset")
+        if args.force_recreate and Path("/mnt/ssd/dataset").exists():
+            cleanup_training_dir("/mnt/ssd/dataset")
             logger.info(
-                "--force-recreateオプションにより、既存のdatasetディレクトリを削除しました"
+                "--force-recreateオプションにより、既存の/mnt/ssd/datasetディレクトリを削除しました"
             )
 
         # モデル学習の実行
@@ -597,9 +597,9 @@ def main():
 
         # --cleanupオプションが指定された場合のみディレクトリを削除
         if args.cleanup:
-            cleanup_training_dir("dataset")
+            cleanup_training_dir("/mnt/ssd/dataset")
             logger.info(
-                "--cleanupオプションにより、datasetディレクトリを削除しました"
+                "--cleanupオプションにより、/mnt/ssd/datasetディレクトリを削除しました"
             )
 
         logger.info("すべての処理が完了しました")
