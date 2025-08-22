@@ -54,7 +54,7 @@ def setup_logging():
 class PaDiMAnomalyDetector:
     """PaDiM 異常検知クラス"""
 
-    def __init__(self, model_path: str = "models/padim_trained.pkl"):
+    def __init__(self, model_path: str = "models/padim_trained.ckpt"):
         self.model_path = model_path
         self.model = None
         self.engine = None
@@ -66,40 +66,26 @@ class PaDiMAnomalyDetector:
             if os.path.exists(self.model_path):
                 # 学習済みモデルがある場合
                 try:
-                    # .pklファイル（pickle形式）を試行
-                    import pickle
-                    with open(self.model_path, 'rb') as f:
-                        self.model = pickle.load(f)
+                    # 新しい形式（.save()で保存されたモデル）を試行
+                    self.model = Padim.load(self.model_path)
                     self.model.eval()
                     logging.info(
-                        f"学習済みPaDiMモデルを読み込みました（pickle形式）: {self.model_path}"
+                        f"学習済みPaDiMモデルを読み込みました（新形式）: {self.model_path}"
                     )
-                except Exception as pkl_error:
+                except Exception:
                     try:
-                        # .ckptファイル（チェックポイント形式）の場合
-                        ckpt_path = self.model_path.replace('.pkl', '.ckpt')
-                        if os.path.exists(ckpt_path):
-                            self.model = Padim.load_from_checkpoint(ckpt_path)
-                            self.model.eval()
-                            logging.info(
-                                f"学習済みPaDiMモデルを読み込みました（チェックポイント）: {ckpt_path}"
-                            )
-                        else:
-                            raise FileNotFoundError(f"チェックポイントファイルが見つかりません: {ckpt_path}")
-                    except Exception as ckpt_error:
-                        try:
-                            # anomalib形式のロード
-                            self.model = Padim.load(self.model_path)
-                            self.model.eval()
-                            logging.info(
-                                f"学習済みPaDiMモデルを読み込みました（anomalib形式）: {self.model_path}"
-                            )
-                        except Exception as anomalib_error:
-                            logging.warning(f"全てのモデル読み込みに失敗、初期モデルを使用: pkl={pkl_error}, ckpt={ckpt_error}, anomalib={anomalib_error}")
-                            self._create_initial_model()
+                        # 古い形式（チェックポイント）を試行
+                        self.model = Padim.load_from_checkpoint(self.model_path)
+                        self.model.eval()
+                        logging.info(
+                            f"学習済みPaDiMモデルを読み込みました（チェックポイント）: {self.model_path}"
+                        )
+                    except Exception as e:
+                        logging.warning(f"モデル読み込みに失敗、初期モデルを使用: {e}")
+                        self._create_initial_model()
             else:
                 logging.warning(
-                    f"学習済みモデルが見つかりません: {self.model_path}。初期モデルを使用します。"
+                    "学習済みモデルが見つかりません。初期モデルを使用します。"
                 )
                 self._create_initial_model()
 
