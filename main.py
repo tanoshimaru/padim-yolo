@@ -54,8 +54,9 @@ def setup_logging():
 class PaDiMAnomalyDetector:
     """PaDiM 異常検知クラス"""
 
-    def __init__(self, model_path: str = "models/padim_trained.ckpt"):
+    def __init__(self, model_path: str = "models/padim_trained.ckpt", anomaly_threshold: float = 0.5):
         self.model_path = model_path
+        self.anomaly_threshold = anomaly_threshold
         self.model = None
         self.engine = None
         self._load_model()
@@ -144,18 +145,17 @@ class PaDiMAnomalyDetector:
                         else None
                     )
 
+                    anomaly_score = float(
+                        pred.pred_score.item()
+                        if hasattr(pred, "pred_score")
+                        else 0.0
+                    )
+                    
                     result = {
-                        "anomaly_score": float(
-                            pred.pred_score.item()
-                            if hasattr(pred, "pred_score")
-                            else 0.0
-                        ),
-                        "is_anomaly": bool(
-                            pred.pred_label.item()
-                            if hasattr(pred, "pred_label")
-                            else False
-                        ),
+                        "anomaly_score": anomaly_score,
+                        "is_anomaly": anomaly_score > self.anomaly_threshold,
                         "anomaly_map": anomaly_map,
+                        "threshold": self.anomaly_threshold,
                     }
 
                     # 最も異常度が高い座標区画を特定
@@ -246,12 +246,19 @@ class PaDiMAnomalyDetector:
 class MainProcessor:
     """メイン処理クラス"""
 
-    def __init__(self):
+    def __init__(self, anomaly_threshold: float = None):
         self.logger = setup_logging()
         self.image_manager = ImageManager()
-        self.padim_detector = PaDiMAnomalyDetector()
+        
+        # 閾値設定（環境変数またはパラメータから取得）
+        if anomaly_threshold is None:
+            anomaly_threshold = float(os.getenv("ANOMALY_THRESHOLD", "0.5"))
+        
+        self.padim_detector = PaDiMAnomalyDetector(anomaly_threshold=anomaly_threshold)
         self.yolo_model = None
         self._load_yolo_model()
+        
+        self.logger.info(f"異常検出閾値を設定: {anomaly_threshold}")
 
     def _load_yolo_model(self):
         """YOLOモデルの読み込み"""
@@ -385,10 +392,14 @@ class MainProcessor:
                 grid_num = person_result["grid_index"]
 
                 if padim_result.get("is_anomaly", False):
-                    # 異常検出
+                    # 異常検出 - images/defectに保存
+                    saved_path = self.image_manager.save_image(
+                        temp_image_path, "defect", timestamp
+                    )
+                    result["saved_path"] = saved_path
                     result["final_decision"] = "anomaly"
                     self.logger.warning(
-                        f"異常が検出されました (Grid {grid_num:02d}): score={padim_result.get('anomaly_score', 0):.4f}"
+                        f"異常が検出されました (Grid {grid_num:02d}): score={padim_result.get('anomaly_score', 0):.4f} (閾値: {padim_result.get('threshold', 0):.4f}) -> {saved_path}に保存"
                     )
                 else:
                     # 正常 - 該当グリッドに保存
@@ -450,6 +461,7 @@ def main():
         if result.get("padim_result"):
             padim_result = result["padim_result"]
             print(f"異常スコア: {padim_result.get('anomaly_score', 0):.4f}")
+            print(f"異常閾値: {padim_result.get('threshold', 0):.4f}")
             print(f"異常判定: {padim_result.get('is_anomaly', False)}")
 
             # 最も異常度が高い座標区画の情報を出力
