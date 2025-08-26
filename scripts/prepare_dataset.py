@@ -126,10 +126,6 @@ class TrainingDataPreparer:
 - defectディレクトリ: {self.defect_dir}
 - 操作モード: {"コピー" if self.copy_mode else "移動"}
 - ランダムシード: {self.random_seed}
-
-## 学習開始コマンド
-```bash
-python train_padim.py --data_root {self.target_dir}
 ```
 """
 
