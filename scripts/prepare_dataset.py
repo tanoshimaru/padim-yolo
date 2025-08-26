@@ -31,102 +31,82 @@ def setup_logging():
     return logging.getLogger(__name__)
 
 
+
+from PIL import Image
+
 class TrainingDataPreparer:
-    def copy_defect_only(self):
-        """images/defect配下の画像をdataset/defectに全てコピーまたは移動する"""
-        import shutil
-        defect_src = self.source_dir / "defect"
-        defect_dst = self.defect_dir
-        defect_dst.mkdir(parents=True, exist_ok=True)
-        if not defect_src.exists():
-            self.logger.error(f"ソースディレクトリが存在しません: {defect_src}")
-            return False
-        count = 0
-        for img_path in defect_src.glob("**/*"):
-            if img_path.is_file():
-                dst_path = defect_dst / img_path.name
-                if self.copy_mode:
-                    shutil.copy2(img_path, dst_path)
-                else:
-                    shutil.move(img_path, dst_path)
-                count += 1
-        self.logger.info(f"defect画像 {count} 枚を {defect_dst} に{'コピー' if self.copy_mode else '移動'}しました")
-        return True
     """学習データ準備クラス"""
 
     def __init__(
         self,
         source_dir: str = "./images",
         target_dir: str = "./dataset",
-        normal_ratio: float = 0.8,
         copy_mode: bool = True,
         random_seed: int = 42,
+        resize_size: tuple = (224, 224),
     ):
         self.logger = setup_logging()
         self.source_dir = Path(source_dir)
         self.target_dir = Path(target_dir)
         self.good_dir = self.target_dir / "good"
         self.defect_dir = self.target_dir / "defect"
-        self.normal_ratio = normal_ratio
         self.copy_mode = copy_mode  # True: コピー, False: 移動
         self.random_seed = random_seed
+        self.resize_size = resize_size
 
 
     def prepare_training_data(self) -> bool:
-        """学習データを準備（シェルスクリプト使用）"""
-        import subprocess
+        """images/defect→dataset/defect, images/defect以外→dataset/goodにリサイズして分類"""
+        import shutil
+        import random
 
         try:
-            self.logger.info("=== 学習データ準備開始（高速化） ===")
+            self.logger.info("=== 学習データ準備開始 ===")
 
             # dataset/good, dataset/defect ディレクトリを作成
             self.good_dir.mkdir(parents=True, exist_ok=True)
             self.defect_dir.mkdir(parents=True, exist_ok=True)
 
-            # シェルスクリプトで高速処理を実行
-            script_path = Path(__file__).parent / "prepare_dataset.sh"
-            try:
-                result = subprocess.run(
-                    [
-                        str(script_path),
-                        str(self.source_dir),
-                        str(self.good_dir),
-                        str(self.defect_dir),
-                        str(self.normal_ratio),
-                        "true" if self.copy_mode else "false",
-                        str(self.random_seed),
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
+            # defect画像
+            defect_src = self.source_dir / "defect"
+            defect_count = 0
+            if defect_src.exists():
+                for img_path in defect_src.glob("**/*"):
+                    if img_path.is_file():
+                        dst_path = self.defect_dir / img_path.name
+                        self._resize_and_save(img_path, dst_path)
+                        defect_count += 1
+            else:
+                self.logger.warning(f"defectディレクトリが存在しません: {defect_src}")
 
-                # 出力をログに記録
-                output_lines = result.stdout.strip().split("\n")
-                for line in output_lines[:-1]:  # 最後の行以外を出力
-                    self.logger.info(line)
+            # good画像（images/defect以外のサブディレクトリ配下）
+            good_count = 0
+            for subdir in self.source_dir.iterdir():
+                if subdir.is_dir() and subdir.name != "defect":
+                    for img_path in subdir.glob("**/*"):
+                        if img_path.is_file():
+                            dst_path = self.good_dir / f"{subdir.name}_{img_path.name}"
+                            self._resize_and_save(img_path, dst_path)
+                            good_count += 1
 
-                # 最後の行から統計情報を取得
-                stats_line = output_lines[-1]
-                if "|" in stats_line:
-                    train_count, val_count = map(int, stats_line.split("|"))
-
-                    # データセット情報ファイル作成
-                    self.create_dataset_info(train_count, val_count)
-
-                    self.logger.info("=== 学習データ準備完了 ===")
-                    return True
-                else:
-                    self.logger.error("シェルスクリプトからの統計情報取得エラー")
-                    return False
-
-            except subprocess.CalledProcessError as e:
-                self.logger.error(f"シェルスクリプト実行エラー: {e.stderr}")
-                raise RuntimeError(f"学習データ準備に失敗しました: {e.stderr}")
-
+            self.create_dataset_info(good_count, defect_count)
+            self.logger.info(f"defect画像 {defect_count} 枚, good画像 {good_count} 枚を準備しました")
+            self.logger.info("=== 学習データ準備完了 ===")
+            return True
         except Exception as e:
             self.logger.error(f"学習データ準備でエラー: {e}")
             raise
+
+    def _resize_and_save(self, src_path, dst_path):
+        """画像をリサイズして保存"""
+        try:
+            with Image.open(src_path) as img:
+                img = img.convert("RGB")
+                img = img.resize(self.resize_size, Image.LANCZOS)
+                dst_path.parent.mkdir(parents=True, exist_ok=True)
+                img.save(dst_path)
+        except Exception as e:
+            self.logger.error(f"画像リサイズ保存失敗: {src_path} → {dst_path}: {e}")
 
     def create_dataset_info(self, train_count: int, val_count: int):
         """データセット情報ファイルを作成"""
@@ -144,7 +124,6 @@ class TrainingDataPreparer:
 - ソースディレクトリ: {self.source_dir}
 - goodディレクトリ: {self.good_dir}
 - defectディレクトリ: {self.defect_dir}
-- 正常画像比率: {self.normal_ratio}
 - 操作モード: {"コピー" if self.copy_mode else "移動"}
 - ランダムシード: {self.random_seed}
 
@@ -166,6 +145,7 @@ python train_padim.py --data_root {self.target_dir}
         if self.target_dir.exists():
             self.logger.info(f"既存のターゲットディレクトリを削除: {self.target_dir}")
             shutil.rmtree(self.target_dir)
+
 
 
 def main():
@@ -201,6 +181,14 @@ def main():
         action="store_true",
         help="ターゲットディレクトリを事前にクリーン",
     )
+    parser.add_argument(
+        "--resize",
+        type=int,
+        nargs=2,
+        metavar=("WIDTH", "HEIGHT"),
+        default=[224, 224],
+        help="リサイズ後の画像サイズ (default: 224 224)",
+    )
 
     args = parser.parse_args()
 
@@ -208,10 +196,10 @@ def main():
         preparer = TrainingDataPreparer(
             source_dir=args.source_dir,
             target_dir=args.target_dir,
-            normal_ratio=args.normal_ratio,
             copy_mode=not args.move,
             random_seed=args.random_seed,
         )
+        preparer.resize_size = tuple(args.resize)
 
         if args.clean:
             preparer.clean_target_directory()
