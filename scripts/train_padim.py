@@ -267,114 +267,76 @@ def train_padim_model(
     max_epochs: int = 10,
     batch_size: int = 4,  # Jetson向けに削減
     num_workers: int = 2,  # Jetson向けに削減
-) -> None:
-    """PaDiMモデルの学習"""
+):
     logger = logging.getLogger(__name__)
-
-    # モデル保存ディレクトリを作成
-    Path(model_save_path).parent.mkdir(parents=True, exist_ok=True)
-
-    logger.info("PaDiMモデルの学習を開始します")
-    logger.info("元画像サイズ: 640x480 (カメラ解像度)")
-    logger.info(f"リサイズ後サイズ: {image_size} (処理効率のため)")
-    logger.info(f"最大エポック数: {max_epochs}")
-    logger.info(f"バッチサイズ: {batch_size}")
-    logger.info(f"ワーカー数: {num_workers}")
-
-    # データセットディレクトリを作成または再利用
     training_dir = "dataset"
+    training_path = Path(training_dir)
+    if not training_path.exists() or not training_path.is_dir():
+        logger.error(f"データセットディレクトリが存在しません: {training_dir}")
+        logger.error("事前にデータセットを準備してください。")
+        return
+    training_root = training_dir
 
-    try:
-        # データセットを作成（既存の場合は再利用）
-        training_root, total_images = create_unified_training_dir(
-            images_dir, training_dir, image_size
-        )
+    # Folderデータモジュールを使用（dataset/train/good、dataset/test/good、dataset/test/defect）
+    datamodule = Folder(
+        name="padim_training",
+        root=training_root,
+        normal_dir="train/good",
+        abnormal_dir="test/defect",
+        train_batch_size=batch_size,
+        num_workers=num_workers,
+        test_split_ratio=0.0,
+        val_split_ratio=0.0,
+    )
+    logger.info(f"Folderデータモジュールを作成しました (num_workers={num_workers})")
 
-        if total_images == 0:
-            logger.error("学習に使用できる画像が見つかりません")
-            logger.info("以下のディレクトリに画像を配置してください:")
-            logger.info("  - images/grid_00 〜 images/grid_15 (人が写っている正常画像)")
-            logger.info("  - images/no_person (人が写っていない正常画像)")
-            logger.info("  - images/test/normal (正常なテスト画像)")
-            logger.info("  - images/test/anomaly (異常なテスト画像)")
-            cleanup_training_dir(training_dir)
-            return
+    # 実際のファイル数を先に確認
+    train_files = len(
+        [f for f in (Path(training_root) / "train" / "good").iterdir() if f.is_file()]
+    )
+    test_good_files = len(
+        [f for f in (Path(training_root) / "test" / "good").iterdir() if f.is_file()]
+    ) if (Path(training_root) / "test" / "good").exists() else 0
+    test_defect_files = len(
+        [f for f in (Path(training_root) / "test" / "defect").iterdir() if f.is_file()]
+    ) if (Path(training_root) / "test" / "defect").exists() else 0
+    
+    logger.info(f"dataset/train/good内の実際のファイル数: {train_files}")
+    logger.info(f"dataset/test/good内の実際のファイル数: {test_good_files}")
+    logger.info(f"dataset/test/defect内の実際のファイル数: {test_defect_files}")
 
-        # Folderデータモジュールを使用（dataset/train/good、dataset/test/good、dataset/test/defect）
-        datamodule = Folder(
-            name="padim_training",
-            root=training_root,
-            normal_dir="train/good",
-            abnormal_dir="test/defect",
-            train_batch_size=batch_size,
-            num_workers=num_workers,
-            test_split_ratio=0.0,
-            val_split_ratio=0.0,
-        )
-        logger.info(f"Folderデータモジュールを作成しました (num_workers={num_workers})")
+    # データモジュールをセットアップ
+    logger.info("データモジュールをセットアップ中...")
+    datamodule.setup()
+    logger.info("データモジュールのセットアップが完了しました")
 
-        # 実際のファイル数を先に確認
-        train_files = len(
-            [f for f in (Path(training_root) / "train" / "good").iterdir() if f.is_file()]
-        )
-        test_good_files = len(
-            [f for f in (Path(training_root) / "test" / "good").iterdir() if f.is_file()]
-        ) if (Path(training_root) / "test" / "good").exists() else 0
-        test_defect_files = len(
-            [f for f in (Path(training_root) / "test" / "defect").iterdir() if f.is_file()]
-        ) if (Path(training_root) / "test" / "defect").exists() else 0
-        
-        logger.info(f"dataset/train/good内の実際のファイル数: {train_files}")
-        logger.info(f"dataset/test/good内の実際のファイル数: {test_good_files}")
-        logger.info(f"dataset/test/defect内の実際のファイル数: {test_defect_files}")
-
-        # データモジュールをセットアップ
-        logger.info("データモジュールをセットアップ中...")
-        datamodule.setup()
-        logger.info("データモジュールのセットアップが完了しました")
-        
-        # データモジュールの詳細情報を表示
-        logger.info("=" * 40)
-        logger.info("データモジュール内訳")
-        logger.info("=" * 40)
-        
-        try:
-            if hasattr(datamodule, 'train_dataset') and datamodule.train_dataset:
-                train_size = len(datamodule.train_dataset)
-                logger.info(f"学習用データセット: {train_size} 枚")
-            
-            if hasattr(datamodule, 'val_dataset') and datamodule.val_dataset:
-                val_size = len(datamodule.val_dataset)
-                logger.info(f"検証用データセット: {val_size} 枚")
-            
-            if hasattr(datamodule, 'test_dataset') and datamodule.test_dataset:
-                test_size = len(datamodule.test_dataset)
-                logger.info(f"テスト用データセット: {test_size} 枚")
-            
-            # データローダーの情報
-            if hasattr(datamodule, 'train_dataloader'):
-                train_loader = datamodule.train_dataloader()
-                if train_loader:
-                    logger.info(f"学習用バッチ数: {len(train_loader)} バッチ")
-            
-            if hasattr(datamodule, 'val_dataloader'):
-                val_loader = datamodule.val_dataloader()
-                if val_loader:
-                    logger.info(f"検証用バッチ数: {len(val_loader)} バッチ")
-            
-            if hasattr(datamodule, 'test_dataloader'):
-                test_loader = datamodule.test_dataloader()
-                if test_loader:
-                    logger.info(f"テスト用バッチ数: {len(test_loader)} バッチ")
-                    
-        except Exception as e:
-            logger.warning(f"データモジュール情報の取得に失敗: {e}")
-        
-        logger.info("=" * 40)
-
-    except Exception as e:
-        logger.error(f"データセットの準備に失敗: {e}")
-        raise
+    # データモジュールの詳細情報を表示
+    logger.info("=" * 40)
+    logger.info("データモジュール内訳")
+    logger.info("=" * 40)
+    if hasattr(datamodule, 'train_dataset') and datamodule.train_dataset:
+        train_size = len(datamodule.train_dataset)
+        logger.info(f"学習用データセット: {train_size} 枚")
+    if hasattr(datamodule, 'val_dataset') and datamodule.val_dataset:
+        val_size = len(datamodule.val_dataset)
+        logger.info(f"検証用データセット: {val_size} 枚")
+    if hasattr(datamodule, 'test_dataset') and datamodule.test_dataset:
+        test_size = len(datamodule.test_dataset)
+        logger.info(f"テスト用データセット: {test_size} 枚")
+    # データローダーの情報
+    if hasattr(datamodule, 'train_dataloader'):
+        train_loader = datamodule.train_dataloader()
+        if train_loader:
+            logger.info(f"学習用バッチ数: {len(train_loader)} バッチ")
+    if hasattr(datamodule, 'val_dataloader'):
+        val_loader = datamodule.val_dataloader()
+        if val_loader:
+            logger.info(f"検証用バッチ数: {len(val_loader)} バッチ")
+    if hasattr(datamodule, 'test_dataloader'):
+        test_loader = datamodule.test_dataloader()
+        if test_loader:
+            logger.info(f"テスト用バッチ数: {len(test_loader)} バッチ")
+    logger.info("=" * 40)
 
     # モデルの準備（画像サイズを明示的に指定）
     logger.info(f"PaDiMモデルを作成中（画像サイズ: {image_size}）")

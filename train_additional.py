@@ -46,52 +46,15 @@ class AdditionalTrainer:
         self.models_dir = Path("models")
         self.models_dir.mkdir(exist_ok=True)
 
-    def prepare_training_data(self) -> str:
-        """学習用データの準備（シェルスクリプト使用）
 
-        Returns:
-            str: 学習用データディレクトリのパス
-        """
-        import subprocess
 
-        # 学習用データディレクトリを作成
-        train_data_dir = Path("tmp/train_data")
-
-        # シェルスクリプトで高速コピーを実行
-        script_path = (
-            Path(__file__).parent / "scripts" / "prepare_additional_training.sh"
-        )
-        try:
-            result = subprocess.run(
-                [
-                    str(script_path),
-                    "images",  # 画像ディレクトリ
-                    str(train_data_dir),
-                ],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-
-            # 出力をログに記録
-            output_lines = result.stdout.strip().split("\n")
-            for line in output_lines[:-1]:  # 最後の行以外を出力
-                self.logger.info(line)
-
-            # 最後の行からコピー数を取得
-            copied_count = int(output_lines[-1]) if output_lines else 0
-
-            if copied_count == 0:
-                self.logger.warning("学習用画像が見つかりません")
-
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"シェルスクリプト実行エラー: {e.stderr}")
-            raise RuntimeError(f"学習データ準備に失敗しました: {e.stderr}")
-        except (ValueError, IndexError) as e:
-            self.logger.error(f"シェルスクリプトからの出力解析エラー: {e}")
-            raise RuntimeError(f"シェルスクリプト出力の解析に失敗しました: {e}")
-
-        return str(train_data_dir)
+    def check_dataset_exists(self, dataset_dir: str = "dataset") -> bool:
+        """datasetディレクトリが存在するかチェック"""
+        d = Path(dataset_dir)
+        if not d.exists() or not d.is_dir():
+            self.logger.error(f"データセットディレクトリが存在しません: {dataset_dir}")
+            return False
+        return True
 
     def create_model(self) -> Padim:
         """PaDiMモデルの作成"""
@@ -270,6 +233,8 @@ class AdditionalTrainer:
 
 def main():
     """メイン関数"""
+
+    data_dir = None
     try:
         trainer = AdditionalTrainer()
 
@@ -288,9 +253,13 @@ def main():
             print("学習用画像がありません。学習をスキップします。")
             return 0
 
-        # 学習データ準備
-        print("\n学習データを準備中...")
-        data_dir = trainer.prepare_training_data()
+        # datasetディレクトリの存在チェック
+        data_dir = "dataset"
+        if not trainer.check_dataset_exists(data_dir):
+            print(f"❌ データセットディレクトリが存在しません: {data_dir}")
+            print("事前にデータセットを準備してください。")
+            data_dir = None
+            return 1
 
         try:
             # モデル学習実行
@@ -320,7 +289,8 @@ def main():
 
         finally:
             # 一時データ削除
-            trainer.cleanup_temp_data(data_dir)
+            if data_dir:
+                trainer.cleanup_temp_data(data_dir)
 
     except Exception as e:
         print(f"エラーが発生しました: {e}")

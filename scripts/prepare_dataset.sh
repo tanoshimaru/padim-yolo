@@ -3,8 +3,9 @@
 
 set -e
 
+
 SOURCE_DIR="${1:-./images}"
-TARGET_DIR="${2:-./training_data}"
+TARGET_DIR="${2:-./dataset}"
 NORMAL_RATIO="${3:-0.8}"
 COPY_MODE="${4:-true}"
 RANDOM_SEED="${5:-42}"
@@ -15,7 +16,7 @@ echo "正常画像比率: $NORMAL_RATIO"
 echo "コピーモード: $COPY_MODE"
 
 # ターゲットディレクトリ作成
-mkdir -p "$TARGET_DIR/normal" "$TARGET_DIR/abnormal"
+mkdir -p "$TARGET_DIR/good" "$TARGET_DIR/defect"
 
 # 一時ファイル作成
 temp_normal=$(mktemp)
@@ -67,6 +68,7 @@ import math
 
 random.seed($RANDOM_SEED)
 
+
 def process_images(file_list, ratio, target_prefix):
     if not os.path.exists(file_list) or os.path.getsize(file_list) == 0:
         return 0, 0
@@ -88,7 +90,7 @@ def process_images(file_list, ratio, target_prefix):
         if os.path.exists(img_path):
             basename = os.path.basename(img_path)
             name, ext = os.path.splitext(basename)
-            target_path = f"$TARGET_DIR/normal/{target_prefix}_{name}_{i:04d}{ext}"
+            target_path = f"$TARGET_DIR/good/{target_prefix}_{name}_{i:04d}{ext}"
             if "$COPY_MODE" == "true":
                 shutil.copy2(img_path, target_path)
             else:
@@ -101,7 +103,7 @@ def process_images(file_list, ratio, target_prefix):
         if os.path.exists(img_path):
             basename = os.path.basename(img_path)
             name, ext = os.path.splitext(basename)
-            target_path = f"$TARGET_DIR/abnormal/{target_prefix}_val_{name}_{i:04d}{ext}"
+            target_path = f"$TARGET_DIR/defect/{target_prefix}_val_{name}_{i:04d}{ext}"
             if "$COPY_MODE" == "true":
                 shutil.copy2(img_path, target_path)
             else:

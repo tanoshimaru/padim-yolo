@@ -2,7 +2,7 @@
 """
 PaDiM学習用データ準備スクリプト
 
-images/ ディレクトリ内の画像を training_data/ に分散配置し、
+images/ ディレクトリ内の画像を dataset/ に分散配置し、
 PaDiMの学習データセットを準備します。
 """
 
@@ -32,12 +32,32 @@ def setup_logging():
 
 
 class TrainingDataPreparer:
+    def copy_defect_only(self):
+        """images/defect配下の画像をdataset/defectに全てコピーまたは移動する"""
+        import shutil
+        defect_src = self.source_dir / "defect"
+        defect_dst = self.defect_dir
+        defect_dst.mkdir(parents=True, exist_ok=True)
+        if not defect_src.exists():
+            self.logger.error(f"ソースディレクトリが存在しません: {defect_src}")
+            return False
+        count = 0
+        for img_path in defect_src.glob("**/*"):
+            if img_path.is_file():
+                dst_path = defect_dst / img_path.name
+                if self.copy_mode:
+                    shutil.copy2(img_path, dst_path)
+                else:
+                    shutil.move(img_path, dst_path)
+                count += 1
+        self.logger.info(f"defect画像 {count} 枚を {defect_dst} に{'コピー' if self.copy_mode else '移動'}しました")
+        return True
     """学習データ準備クラス"""
 
     def __init__(
         self,
         source_dir: str = "./images",
-        target_dir: str = "./training_data",
+        target_dir: str = "./dataset",
         normal_ratio: float = 0.8,
         copy_mode: bool = True,
         random_seed: int = 42,
@@ -45,6 +65,8 @@ class TrainingDataPreparer:
         self.logger = setup_logging()
         self.source_dir = Path(source_dir)
         self.target_dir = Path(target_dir)
+        self.good_dir = self.target_dir / "good"
+        self.defect_dir = self.target_dir / "defect"
         self.normal_ratio = normal_ratio
         self.copy_mode = copy_mode  # True: コピー, False: 移動
         self.random_seed = random_seed
@@ -57,14 +79,19 @@ class TrainingDataPreparer:
         try:
             self.logger.info("=== 学習データ準備開始（高速化） ===")
 
+            # dataset/good, dataset/defect ディレクトリを作成
+            self.good_dir.mkdir(parents=True, exist_ok=True)
+            self.defect_dir.mkdir(parents=True, exist_ok=True)
+
             # シェルスクリプトで高速処理を実行
-            script_path = Path(__file__).parent / "prepare_data.sh"
+            script_path = Path(__file__).parent / "prepare_dataset.sh"
             try:
                 result = subprocess.run(
                     [
                         str(script_path),
                         str(self.source_dir),
-                        str(self.target_dir),
+                        str(self.good_dir),
+                        str(self.defect_dir),
                         str(self.normal_ratio),
                         "true" if self.copy_mode else "false",
                         str(self.random_seed),
@@ -109,13 +136,14 @@ class TrainingDataPreparer:
 {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 ## データ統計
-- 学習用正常画像: {train_count} 枚
-- 検証用画像: {val_count} 枚
+- good画像: {train_count} 枚
+- defect画像: {val_count} 枚
 - 総画像数: {train_count + val_count} 枚
 
 ## ソース設定
 - ソースディレクトリ: {self.source_dir}
-- ターゲットディレクトリ: {self.target_dir}
+- goodディレクトリ: {self.good_dir}
+- defectディレクトリ: {self.defect_dir}
 - 正常画像比率: {self.normal_ratio}
 - 操作モード: {"コピー" if self.copy_mode else "移動"}
 - ランダムシード: {self.random_seed}
@@ -154,14 +182,8 @@ def main():
     parser.add_argument(
         "--target_dir",
         type=str,
-        default="./training_data",
-        help="学習データ出力ディレクトリ (default: ./training_data)",
-    )
-    parser.add_argument(
-        "--normal_ratio",
-        type=float,
-        default=0.8,
-        help="学習用データの比率 (default: 0.8)",
+        default="./dataset",
+        help="データセット出力ディレクトリ (default: ./dataset)",
     )
     parser.add_argument(
         "--move",
