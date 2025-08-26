@@ -208,8 +208,6 @@ def main():
 
         if success:
             print(f"\n学習データの準備が完了しました: {args.target_dir}")
-            print("\n次のコマンドで学習を開始できます:")
-            print(f"python train_padim.py --data_root {args.target_dir}")
 
         return 0 if success else 1
 
