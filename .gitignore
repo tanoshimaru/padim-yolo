@@ -1,6 +1,7 @@
 *.engine
 *.onnx
 *.pt
+*.ckpt
 
 *.zip
 
@@ -18,5 +19,3 @@ images
 logs
 results
 tmp
-
-padim_trained.ckpt
