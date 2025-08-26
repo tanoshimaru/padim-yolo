@@ -19,4 +19,4 @@ logs
 results
 tmp
 
-padim_trained.pkl
+padim_trained.ckpt

@@ -11,12 +11,14 @@ from anomalib.models import Padim
 
 def setup_logging() -> logging.Logger:
     """ログ設定"""
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
     log_filename = f"train_padim_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[
-            logging.FileHandler(log_filename, encoding="utf-8"),
+            logging.FileHandler(log_dir / log_filename, encoding="utf-8"),
             logging.StreamHandler(sys.stdout),
         ],
         force=True,
@@ -62,7 +64,7 @@ def create_padim_model(
 def train_test_padim_model(
     datamodule: datamodules,
     image_size: tuple = (224, 224),  # ResNet標準サイズ（最適な処理効率）
-    batch_size: int = 16,
+    batch_size: int = 32,
     num_workers: int = 2,
 ) -> None:
     """PaDiMモデルの学習"""
@@ -168,9 +170,9 @@ def train_test_padim_model(
 
 
 def main():
-    dataset_root = "/content/drive/MyDrive/Colab Notebooks/colab-share/dataset"
+    dataset_root = "./dataset"
     image_size = (224, 224)
-    batch_size = 4
+    batch_size = 128
     num_workers = 2
 
     # ログ設定
