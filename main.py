@@ -265,8 +265,12 @@ class MainProcessor:
                     prefix = "error_"
                     result["final_decision"] = "error"
                 else:
-                    prefix = f"grid_{grid_num:02d}_"
-                    result["final_decision"] = "normal" if not padim_result.get("is_anomaly", False) else "anomaly"
+                    if padim_result.get("is_anomaly", False):
+                        prefix = f"defect_grid_{grid_num:02d}_"
+                        result["final_decision"] = "anomaly"
+                    else:
+                        prefix = f"grid_{grid_num:02d}_"
+                        result["final_decision"] = "normal"
             # 保存先ディレクトリ
             checked_dir = Path("images/checked")
             checked_dir.mkdir(parents=True, exist_ok=True)
