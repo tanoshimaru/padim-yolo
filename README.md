@@ -314,3 +314,11 @@ USERNAME=$(whoami)  # ホストのユーザー名
 ユーザー設定: USERNAME=tano, UID=1000, GID=1000
 RTSP設定: rtsp://admin:***@192.168.1.100:554/profile2/media.smp
 ```
+
+# 備忘録
+
+```
+python -m venv .venv --system-site-packages
+source .venv/bin/activate
+pip install anomalib[loggers] dotenv open_clip_torch
+```

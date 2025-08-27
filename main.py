@@ -23,7 +23,6 @@ from anomalib.models import Padim
 from anomalib.engine import Engine
 from dotenv import load_dotenv
 from person_detector import detect_person_and_get_grid
-from image_manager import ImageManager
 
 
 # 環境変数を明示的に読み込み
@@ -242,62 +241,66 @@ class PaDiMAnomalyDetector:
 
 class MainProcessor:
     def process_image_file(self, image_path: str) -> Dict[str, Any]:
-        """指定画像ファイルで推論を実行"""
+        """指定画像ファイルで推論を実行し、全画像をimages/checkedにprefix付きで保存"""
         try:
-            # 2. YOLO で人検出
             person_result = detect_person_and_get_grid(image_path, self.yolo_model)
-
             result = {
                 "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
                 "image_path": image_path,
                 "person_detected": person_result is not None,
                 "person_info": person_result,
                 "padim_result": None,
-                "final_decision": "normal",
+                "final_decision": None,
                 "saved_path": None,
             }
-
+            prefix = ""
             if person_result is None:
-                # 人が写っていない場合
-                saved_path = self.image_manager.save_image(
-                    image_path, "no_person", result["timestamp"]
-                )
-                result["saved_path"] = saved_path
+                prefix = "no_person_"
                 result["final_decision"] = "no_person"
-                self.logger.info("人が検出されませんでした。images/no_person に保存")
             else:
-                # 人が写っている場合 - PaDiM で異常検知
                 padim_result = self.padim_detector.predict(image_path)
                 result["padim_result"] = padim_result
-                grid_num = person_result["grid_index"]
-                if padim_result.get("is_anomaly", False):
-                    saved_path = self.image_manager.save_image(
-                        image_path, "defect", result["timestamp"]
-                    )
-                    result["saved_path"] = saved_path
-                    result["final_decision"] = "anomaly"
-                    self.logger.warning(
-                        f"異常が検出されました (Grid {grid_num:02d}): score={padim_result.get('anomaly_score', 0):.4f} (閾値: {padim_result.get('threshold', 0):.4f}) -> {saved_path}に保存"
-                    )
+                grid_num = person_result.get("grid_index", 0)
+                if padim_result.get("error"):
+                    prefix = "error_"
+                    result["final_decision"] = "error"
                 else:
-                    saved_path = self.image_manager.save_image(
-                        image_path, f"grid_{grid_num:02d}", result["timestamp"]
-                    )
-                    result["saved_path"] = saved_path
-                    result["final_decision"] = "normal"
-                    self.logger.info(f"正常画像として保存: {saved_path}")
-
-            # 結果をJSONで記録
+                    prefix = f"grid{grid_num:02d}_"
+                    result["final_decision"] = "normal" if not padim_result.get("is_anomaly", False) else "anomaly"
+            # 保存先ディレクトリ
+            checked_dir = Path("images/checked")
+            checked_dir.mkdir(parents=True, exist_ok=True)
+            # 保存ファイル名
+            ts = result["timestamp"]
+            ext = Path(image_path).suffix or ".png"
+            save_name = f"{prefix}{ts}{ext}"
+            save_path = checked_dir / save_name
+            import shutil
+            shutil.copy2(image_path, save_path)
+            result["saved_path"] = str(save_path)
+            self.logger.info(f"画像を {save_path} に保存 (prefix={prefix})")
             self._save_result_log(result)
             return result
         except Exception as e:
             self.logger.error(f"画像ファイル処理中にエラーが発生: {e}")
-            return {"error": str(e), "image_path": image_path}
+            # エラー時もerror_で保存
+            checked_dir = Path("images/checked")
+            checked_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            ext = Path(image_path).suffix or ".png"
+            save_name = f"error_{ts}{ext}"
+            save_path = checked_dir / save_name
+            try:
+                import shutil
+                shutil.copy2(image_path, save_path)
+            except Exception:
+                pass
+            return {"error": str(e), "image_path": image_path, "saved_path": str(save_path)}
     """メイン処理クラス"""
 
     def __init__(self, anomaly_threshold: float = None):
         self.logger = setup_logging()
-        self.image_manager = ImageManager()
+
         
         # 閾値設定（環境変数またはパラメータから取得）
         if anomaly_threshold is None:
@@ -400,76 +403,17 @@ class MainProcessor:
             return False
 
     def process_weekday(self) -> Dict[str, Any]:
-        """平日の処理メイン"""
+        """平日の処理メイン: 撮影画像もcheckedにprefix付きで保存"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        # 1. 撮影
         temp_image_path = f"tmp/captured_{timestamp}.png"
         os.makedirs("tmp", exist_ok=True)
-
         if not self.capture_image(temp_image_path):
             return {"error": "画像撮影に失敗しました"}
-
         try:
-            # 2. YOLO で人検出
-            person_result = detect_person_and_get_grid(temp_image_path, self.yolo_model)
-
-            result = {
-                "timestamp": timestamp,
-                "image_path": temp_image_path,
-                "person_detected": person_result is not None,
-                "person_info": person_result,
-                "padim_result": None,
-                "final_decision": "normal",
-                "saved_path": None,
-            }
-
-            if person_result is None:
-                # 人が写っていない場合
-                saved_path = self.image_manager.save_image(
-                    temp_image_path, "no_person", timestamp
-                )
-                result["saved_path"] = saved_path
-                result["final_decision"] = "no_person"
-                self.logger.info("人が検出されませんでした。images/no_person に保存")
-
-            else:
-                # 人が写っている場合 - PaDiM で異常検知
-                padim_result = self.padim_detector.predict(temp_image_path)
-                result["padim_result"] = padim_result
-
-                grid_num = person_result["grid_index"]
-
-                if padim_result.get("is_anomaly", False):
-                    # 異常検出 - images/defectに保存
-                    saved_path = self.image_manager.save_image(
-                        temp_image_path, "defect", timestamp
-                    )
-                    result["saved_path"] = saved_path
-                    result["final_decision"] = "anomaly"
-                    self.logger.warning(
-                        f"異常が検出されました (Grid {grid_num:02d}): score={padim_result.get('anomaly_score', 0):.4f} (閾値: {padim_result.get('threshold', 0):.4f}) -> {saved_path}に保存"
-                    )
-                else:
-                    # 正常 - 該当グリッドに保存
-                    saved_path = self.image_manager.save_image(
-                        temp_image_path, f"grid_{grid_num:02d}", timestamp
-                    )
-                    result["saved_path"] = saved_path
-                    result["final_decision"] = "normal"
-                    self.logger.info(f"正常画像として保存: {saved_path}")
-
-            # 結果をJSONで記録
-            self._save_result_log(result)
-
+            # 推論・保存もprocess_image_fileで一元化
+            result = self.process_image_file(temp_image_path)
             return result
-
-        except Exception as e:
-            self.logger.error(f"処理中にエラーが発生: {e}")
-            return {"error": str(e), "timestamp": timestamp}
-
         finally:
-            # 一時ファイル削除
             if os.path.exists(temp_image_path):
                 os.remove(temp_image_path)
 
