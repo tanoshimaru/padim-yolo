@@ -241,6 +241,58 @@ class PaDiMAnomalyDetector:
 
 
 class MainProcessor:
+    def process_image_file(self, image_path: str) -> Dict[str, Any]:
+        """指定画像ファイルで推論を実行"""
+        try:
+            # 2. YOLO で人検出
+            person_result = detect_person_and_get_grid(image_path, self.yolo_model)
+
+            result = {
+                "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+                "image_path": image_path,
+                "person_detected": person_result is not None,
+                "person_info": person_result,
+                "padim_result": None,
+                "final_decision": "normal",
+                "saved_path": None,
+            }
+
+            if person_result is None:
+                # 人が写っていない場合
+                saved_path = self.image_manager.save_image(
+                    image_path, "no_person", result["timestamp"]
+                )
+                result["saved_path"] = saved_path
+                result["final_decision"] = "no_person"
+                self.logger.info("人が検出されませんでした。images/no_person に保存")
+            else:
+                # 人が写っている場合 - PaDiM で異常検知
+                padim_result = self.padim_detector.predict(image_path)
+                result["padim_result"] = padim_result
+                grid_num = person_result["grid_index"]
+                if padim_result.get("is_anomaly", False):
+                    saved_path = self.image_manager.save_image(
+                        image_path, "defect", result["timestamp"]
+                    )
+                    result["saved_path"] = saved_path
+                    result["final_decision"] = "anomaly"
+                    self.logger.warning(
+                        f"異常が検出されました (Grid {grid_num:02d}): score={padim_result.get('anomaly_score', 0):.4f} (閾値: {padim_result.get('threshold', 0):.4f}) -> {saved_path}に保存"
+                    )
+                else:
+                    saved_path = self.image_manager.save_image(
+                        image_path, f"grid_{grid_num:02d}", result["timestamp"]
+                    )
+                    result["saved_path"] = saved_path
+                    result["final_decision"] = "normal"
+                    self.logger.info(f"正常画像として保存: {saved_path}")
+
+            # 結果をJSONで記録
+            self._save_result_log(result)
+            return result
+        except Exception as e:
+            self.logger.error(f"画像ファイル処理中にエラーが発生: {e}")
+            return {"error": str(e), "image_path": image_path}
     """メイン処理クラス"""
 
     def __init__(self, anomaly_threshold: float = None):
@@ -441,8 +493,13 @@ def main():
     try:
         processor = MainProcessor()
 
-        # 平日処理を実行
-        result = processor.process_weekday()
+        # コマンドライン引数で画像パス指定があればその画像で推論
+        if len(sys.argv) > 1:
+            image_path = sys.argv[1]
+            result = processor.process_image_file(image_path)
+        else:
+            # 平日処理を実行（従来通りカメラ撮影）
+            result = processor.process_weekday()
 
         print("=== 処理結果 ===")
         print(f"タイムスタンプ: {result.get('timestamp', 'N/A')}")

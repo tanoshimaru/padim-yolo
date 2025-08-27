@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y cron imagemagick tzdata && \
 
 RUN pip install "setuptools<69" && \
     pip install anomalib dotenv einops FrEIA kornia lightning onnxslim open-clip-torch scikit-image tifffile timm && \
+    pip install "numpy<2"&& \
     pip install -U setuptools
 
 # # Copy cron configuration
