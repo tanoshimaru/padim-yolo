@@ -27,12 +27,16 @@ cp .env.example .env  # または手動作成
 2. **人検出**: YOLO で人が写っているかを検出
 3. **異常検知**: 人が写っている場合、PaDiM で異常検知を実行
 4. **画像保存**: 結果に基づいて適切なフォルダに画像を保存
+   - 人が写っていない → `images/checked` に `no_person_` prefix
+   - 正常と判定 → `images/checked` に `grid_XX_` prefix
+   - 異常と判定 → `images/checked` に `defect_grid_XX_` prefix
+   - エラー発生 → `images/checked` に `error_` prefix
 5. **ログ記録**: YOLO・PaDiM の結果と画像保存先を記録
 
 ### 土曜日処理
 
-- **追加学習**: `images/no_person`、`images/grid_00~grid_15`の画像を使用して PaDiM の追加学習
-- **モデル保存**: 学習結果を`models`に保存
+- **追加学習**: 現在は保留中（`train_additional.py`は「Jetson上での学習が難しいため、一旦保留します。」とコメントのみ）
+- **代替**: `scripts/train_padim.py`を使用した手動学習が可能
 
 ### 日曜日
 
@@ -47,9 +51,13 @@ padim-yolo/
 ├── run_daily.py              # 日次実行スクリプト
 ├── run_container.sh          # コンテナ管理スクリプト
 ├── person_detector.py        # YOLO人検出モジュール
-├── image_manager.py          # 画像管理モジュール
-├── test_rtsp.py              # RTSP接続テスト用スクリプト
-├── test_rtsp_simple.py       # シンプルRTSP接続テスト
+├── classify_images.py         # 画像分類モジュール
+├── scripts/                  # スクリプト集
+│   ├── test_rtsp.py          # RTSP接続テスト用スクリプト
+│   ├── train_padim.py        # PaDiM学習スクリプト
+│   ├── prepare_dataset.py    # データセット準備スクリプト
+│   ├── distribute_images.py  # 画像分散スクリプト
+│   └── copy_random_images.sh # ランダム画像コピースクリプト
 ├── .env                      # 環境変数設定（RTSP設定など）
 ├── Dockerfile                # Dockerコンテナ設定
 ├── docker-compose.yml        # Docker Compose設定
@@ -59,9 +67,11 @@ padim-yolo/
 │   ├── yolo11n.pt           # YOLO11モデル（自動ダウンロード）
 │   └── yolo11n.onnx
 ├── images/                   # 画像保存ディレクトリ
-│   ├── no_person/           # 人が写っていない画像（最大200枚）
-│   ├── grid_00/             # グリッド0の正常画像（最大200枚）
-│   ├── grid_01/             # グリッド1の正常画像（最大200枚）
+│   ├── checked/             # 処理済み画像（prefix付き）
+│   ├── defect/              # 異常検出画像（classify_images.py実行後）
+│   ├── no_person/           # 人が写っていない画像（classify_images.py実行後、最大200枚）
+│   ├── grid_00/             # グリッド0の正常画像（classify_images.py実行後、最大200枚）
+│   ├── grid_01/             # グリッド1の正常画像（classify_images.py実行後、最大200枚）
 │   └── ...                  # grid_02 ~ grid_15
 └── logs/                    # ログファイル
     ├── main_YYYYMMDD.log
@@ -87,12 +97,25 @@ grid_12  grid_13  grid_14  grid_15
 
 1. **撮影** → 画像取得
 2. **YOLO 検出**
-   - 人が写っていない → `images/no_person`に保存
+   - 人が写っていない → `images/checked`に`no_person_`prefixで保存
    - 人が写っている → 3 へ
 3. **グリッド位置特定** → 人の位置から grid_XX 番号を取得
 4. **PaDiM 異常検知**
-   - 異常検出 → 結果を異常として記録（画像は保存しない）
-   - 正常 → `images/grid_XX`に保存
+   - 異常検出 → `images/checked`に`defect_grid_XX_`prefixで保存
+   - 正常 → `images/checked`に`grid_XX_`prefixで保存
+
+### 画像の分類処理
+
+`classify_images.py`を実行することで、`images/checked`内の画像をprefixに応じて分類：
+
+```bash
+uv run classify_images.py
+```
+
+- `defect_grid_*` → `images/defect/`（prefixを削除して保存）
+- `grid_XX_*` → `images/grid_XX/`（prefixを削除して保存）
+- `no_person_*` → `images/no_person/`（prefixを削除して保存）
+- `error_*` → 削除
 
 ### 画像管理
 
@@ -189,6 +212,9 @@ RTSP_PORT=554
 ```bash
 # RTSP接続をテスト
 ./run_container.sh test
+
+# または直接テストスクリプトを実行
+python scripts/test_rtsp.py
 ```
 
 **注意**: RTSP カメラが利用できない場合、システムは自動的にテスト用のダミー画像を生成して処理を継続します。
@@ -219,7 +245,7 @@ RTSP_PORT=554
       "is_anomaly": false
     },
     "final_decision": "normal",
-    "saved_path": "images/grid_05/20250131_120000.png"
+    "saved_path": "images/checked/grid_05_20250131_120000.png"
   }
   ```
 
@@ -241,7 +267,7 @@ mkdir -p models
 ./run_container.sh test
 
 # 詳細なテストの場合
-docker compose exec app python test_rtsp_simple.py
+docker compose exec app python scripts/test_rtsp.py
 ```
 
 ### PaDiM 学習がうまくいかない場合

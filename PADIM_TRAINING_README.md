@@ -4,22 +4,33 @@ PaDiM 異常検知モデルの学習用スクリプトを作成しました。�
 
 ## 作成されたファイル
 
-1. **`train_padim.py`** - メインの学習スクリプト
-2. **`prepare_training_data.py`** - 学習データ準備スクリプト
-3. **`main.py`** - 学習済みモデル対応に修正済み
+1. **`scripts/train_padim.py`** - メインの学習スクリプト
+2. **`scripts/prepare_dataset.py`** - データセット準備スクリプト  
+3. **`scripts/distribute_images.py`** - 画像分散スクリプト
+4. **`main.py`** - 学習済みモデル対応に修正済み
+5. **`train_additional.py`** - 現在保留中（Jetson学習の課題）
 
 ## 使用手順
 
-### Step 1: 学習データの準備
+### Step 1: 画像の分類
 
-既存の`images/`ディレクトリから学習用データセットを準備：
+まず`images/checked`内の画像をprefixに応じて分類：
+
+```bash
+# 画像を分類してディレクトリに分配
+uv run classify_images.py
+```
+
+### Step 2: 学習データの準備
+
+分類された`images/`ディレクトリから学習用データセットを準備：
 
 ```bash
 # 基本的な準備（コピーモード）
-python prepare_training_data.py
+python scripts/prepare_dataset.py
 
 # 詳細オプション付き
-python prepare_training_data.py \
+python scripts/prepare_dataset.py \
     --source_dir ./images \
     --target_dir ./training_data \
     --normal_ratio 0.8 \
@@ -35,14 +46,14 @@ python prepare_training_data.py \
 - `--clean`: 既存の出力ディレクトリをクリーン
 - `--random_seed`: ランダムシード（デフォルト: 42）
 
-### Step 2: PaDiM モデルの学習
+### Step 3: PaDiM モデルの学習
 
 ```bash
 # 基本的な学習
-python train_padim.py
+python scripts/train_padim.py
 
 # 詳細オプション付き
-python train_padim.py \
+python scripts/train_padim.py \
     --data_root ./training_data \
     --model_save_path ./models/padim_trained.ckpt \
     --batch_size 32 \
@@ -61,11 +72,11 @@ python train_padim.py \
 - `--max_epochs`: 最大エポック数（デフォルト: 1）
 - `--backbone`: バックボーンモデル（resnet18, resnet34, resnet50, wide_resnet50_2）
 
-### Step 3: サンプルデータセット構造の作成（オプション）
+### Step 4: サンプルデータセット構造の作成（オプション）
 
 ```bash
 # サンプル構造を作成
-python train_padim.py --create_sample
+python scripts/train_padim.py --create_sample
 ```
 
 ## データセット構造
@@ -75,14 +86,16 @@ python train_padim.py --create_sample
 ```
 training_data/
 ├── normal/          # 正常画像（必須）
-│   ├── image_001.png
+│   ├── image_001.png  # images/no_person, images/grid_XX から自動収集
 │   ├── image_002.png
 │   └── ...
 └── abnormal/        # 異常画像（オプション）
-    ├── anomaly_001.png
+    ├── anomaly_001.png  # images/defect から自動収集
     ├── anomaly_002.png
     └── ...
 ```
+
+**注意**: `images/defect`フォルダに異常画像が蓄積されてから学習を実行することで、より精度の高いモデルを作成できます。
 
 ## 学習されたモデルの使用
 
@@ -118,21 +131,21 @@ tensorboard --logdir lightning_logs
 
 ```bash
 # バッチサイズを小さくして再実行
-python train_padim.py --batch_size 16
+python scripts/train_padim.py --batch_size 16
 ```
 
 ### エラー: "No normal images found"
 
 ```bash
 # データ準備スクリプトを再実行
-python prepare_training_data.py --clean
+python scripts/prepare_dataset.py --clean
 ```
 
 ### 学習が進まない場合
 
 ```bash
 # エポック数を増やして再実行
-python train_padim.py --max_epochs 10
+python scripts/train_padim.py --max_epochs 10
 ```
 
 ## 高度な使用方法
@@ -141,7 +154,7 @@ python train_padim.py --max_epochs 10
 
 ```bash
 # 独自のデータセット構造で学習
-python train_padim.py \
+python scripts/train_padim.py \
     --data_root /path/to/custom/dataset \
     --normal_dir good \
     --abnormal_dir defect
@@ -151,12 +164,12 @@ python train_padim.py \
 
 ```bash
 # より強力なバックボーンを使用
-python train_padim.py --backbone resnet50 --batch_size 16
+python scripts/train_padim.py --backbone resnet50 --batch_size 16
 ```
 
 ### 複数エポックで精度向上
 
 ```bash
 # より長時間学習して精度を向上
-python train_padim.py --max_epochs 20 --batch_size 16
+python scripts/train_padim.py --max_epochs 20 --batch_size 16
 ```
