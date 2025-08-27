@@ -21,7 +21,6 @@ import numpy as np
 import cv2
 from anomalib.models import Padim
 from anomalib.engine import Engine
-from anomalib.data import Folder
 from dotenv import load_dotenv
 from person_detector import detect_person_and_get_grid
 from image_manager import ImageManager
@@ -107,80 +106,78 @@ class PaDiMAnomalyDetector:
         )
 
     def predict(self, image_path: str) -> Dict[str, Any]:
-        """異常検知の実行"""
+        """異常検知の実行（推論専用）"""
         try:
             if not os.path.exists(image_path):
                 raise FileNotFoundError(f"画像ファイルが見つかりません: {image_path}")
 
-            # 単一画像の推論用データモジュール
-            datamodule = Folder(
-                name="inference",
-                root="./",
-                normal_dir="./tmp_normal",
-                abnormal_dir="./tmp_abnormal",
-            )
+            # 直接画像を読み込んで推論
+            import torch
+            from torchvision import transforms
+            from PIL import Image
 
-            # 一時ディレクトリ作成
-            Path("./tmp_normal").mkdir(exist_ok=True)
-            Path("./tmp_abnormal").mkdir(exist_ok=True)
-
-            # 画像を一時的にコピー
-            import shutil
-
-            temp_image_path = "./tmp_normal/temp.png"
-            shutil.copy2(image_path, temp_image_path)
-
-            try:
-                # 推論実行
-                predictions = self.engine.predict(
-                    model=self.model, datamodule=datamodule
-                )
-
-                if predictions and len(predictions) > 0:
-                    pred = predictions[0]
-
-                    anomaly_map = (
-                        pred.anomaly_map.cpu().numpy()
-                        if hasattr(pred, "anomaly_map")
-                        else None
-                    )
-
-                    anomaly_score = float(
-                        pred.pred_score.item()
-                        if hasattr(pred, "pred_score")
-                        else 0.0
-                    )
-                    
-                    result = {
-                        "anomaly_score": anomaly_score,
-                        "is_anomaly": anomaly_score > self.anomaly_threshold,
-                        "anomaly_map": anomaly_map,
-                        "threshold": self.anomaly_threshold,
-                    }
-
-                    # 最も異常度が高い座標区画を特定
-                    if anomaly_map is not None:
-                        max_anomaly_coords = self._find_max_anomaly_coordinates(
-                            anomaly_map
-                        )
-                        result["max_anomaly_coordinates"] = max_anomaly_coords
-
-                    logging.info(
-                        f"PaDiM推論完了: score={result['anomaly_score']:.4f}, anomaly={result['is_anomaly']}"
-                    )
-                    return result
+            # 画像を読み込み
+            image = Image.open(image_path).convert("RGB")
+            
+            # 前処理（PaDiMの標準前処理）
+            transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+            
+            image_tensor = transform(image).unsqueeze(0)  # バッチ次元を追加
+            
+            # GPUが利用可能な場合はGPUを使用
+            if torch.cuda.is_available():
+                image_tensor = image_tensor.cuda()
+                if hasattr(self.model, 'cuda'):
+                    self.model = self.model.cuda()
+            
+            # 推論モードに設定
+            self.model.eval()
+            
+            with torch.no_grad():
+                # 直接モデルで推論
+                output = self.model(image_tensor)
+                
+                # anomalib v0.7.0以降の場合
+                if hasattr(output, 'pred_score'):
+                    anomaly_score = float(output.pred_score.cpu().item())
+                    anomaly_map = output.anomaly_map.cpu().numpy() if hasattr(output, 'anomaly_map') else None
+                # 辞書形式の場合
+                elif isinstance(output, dict):
+                    anomaly_score = float(output.get('pred_score', 0.0))
+                    anomaly_map = output.get('anomaly_map', None)
+                    if anomaly_map is not None and hasattr(anomaly_map, 'cpu'):
+                        anomaly_map = anomaly_map.cpu().numpy()
+                # フォールバック: 出力テンソルから直接スコアを取得
                 else:
-                    logging.warning("PaDiM推論結果が空です")
-                    return {
-                        "anomaly_score": 0.0,
-                        "is_anomaly": False,
-                        "anomaly_map": None,
-                    }
+                    if hasattr(output, 'cpu'):
+                        anomaly_score = float(torch.mean(output).cpu().item())
+                        anomaly_map = output.cpu().numpy()
+                    else:
+                        anomaly_score = float(torch.mean(torch.tensor(output)).item())
+                        anomaly_map = output
+                
+                result = {
+                    "anomaly_score": anomaly_score,
+                    "is_anomaly": anomaly_score > self.anomaly_threshold,
+                    "anomaly_map": anomaly_map,
+                    "threshold": self.anomaly_threshold,
+                }
 
-            finally:
-                # 一時ファイル削除
-                if os.path.exists(temp_image_path):
-                    os.remove(temp_image_path)
+                # 最も異常度が高い座標区画を特定
+                if anomaly_map is not None:
+                    max_anomaly_coords = self._find_max_anomaly_coordinates(
+                        anomaly_map
+                    )
+                    result["max_anomaly_coordinates"] = max_anomaly_coords
+
+                logging.info(
+                    f"PaDiM推論完了: score={result['anomaly_score']:.4f}, threshold={self.anomaly_threshold:.4f}, anomaly={result['is_anomaly']}"
+                )
+                return result
 
         except Exception as e:
             logging.error(f"PaDiM異常検知エラー: {e}")
