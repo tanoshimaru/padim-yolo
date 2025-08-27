@@ -265,7 +265,7 @@ class MainProcessor:
                     prefix = "error_"
                     result["final_decision"] = "error"
                 else:
-                    prefix = f"grid{grid_num:02d}_"
+                    prefix = f"grid_{grid_num:02d}_"
                     result["final_decision"] = "normal" if not padim_result.get("is_anomaly", False) else "anomaly"
             # 保存先ディレクトリ
             checked_dir = Path("images/checked")
