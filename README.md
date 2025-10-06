@@ -55,7 +55,7 @@ cp .env.example .env  # または手動作成
 
 ## ディレクトリ構造
 
-```
+```plaintext
 padim-yolo/
 ├── main.py                    # メイン処理（平日実行）
 ├── train_additional.py        # 追加学習（土曜実行）
@@ -95,7 +95,7 @@ padim-yolo/
 
 画像を 4×4 の 16 分割し、人が検出された位置を特定：
 
-```
+```plaintext
 grid_00  grid_01  grid_02  grid_03
 grid_04  grid_05  grid_06  grid_07
 grid_08  grid_09  grid_10  grid_11
@@ -353,7 +353,7 @@ USERNAME=$(whoami)  # ホストのユーザー名
 RTSP設定: rtsp://admin:***@192.168.1.100:554/profile2/media.smp
 ```
 
-# 備忘録
+## 備忘録
 
 ```bash
 python -m venv .venv --system-site-packages
