@@ -44,6 +44,7 @@ class TrainingDataPreparer:
         copy_mode: bool = True,
         random_seed: int = 42,
         resize_size: tuple = (224, 224),
+        max_images_per_folder: int | None = None,
     ):
         self.logger = setup_logging()
         self.source_dir = Path(source_dir)
@@ -53,6 +54,7 @@ class TrainingDataPreparer:
         self.copy_mode = copy_mode  # True: コピー, False: 移動
         self.random_seed = random_seed
         self.resize_size = resize_size
+        self.max_images_per_folder = max_images_per_folder
 
 
     def prepare_training_data(self) -> bool:
@@ -62,6 +64,7 @@ class TrainingDataPreparer:
 
         try:
             self.logger.info("=== 学習データ準備開始 ===")
+            random.seed(self.random_seed)
 
             # dataset/good, dataset/defect ディレクトリを作成
             self.good_dir.mkdir(parents=True, exist_ok=True)
@@ -71,11 +74,15 @@ class TrainingDataPreparer:
             defect_src = self.source_dir / "defect"
             defect_count = 0
             if defect_src.exists():
-                for img_path in defect_src.glob("**/*"):
-                    if img_path.is_file():
-                        dst_path = self.defect_dir / img_path.name
-                        self._resize_and_save(img_path, dst_path)
-                        defect_count += 1
+                defect_images = [p for p in defect_src.glob("**/*") if p.is_file()]
+                if self.max_images_per_folder and len(defect_images) > self.max_images_per_folder:
+                    defect_images = random.sample(defect_images, self.max_images_per_folder)
+                    self.logger.info(f"defect画像を{len(defect_images)}枚にサンプリング")
+                
+                for img_path in defect_images:
+                    dst_path = self.defect_dir / img_path.name
+                    self._resize_and_save(img_path, dst_path)
+                    defect_count += 1
             else:
                 self.logger.warning(f"defectディレクトリが存在しません: {defect_src}")
 
@@ -83,11 +90,15 @@ class TrainingDataPreparer:
             good_count = 0
             for subdir in self.source_dir.iterdir():
                 if subdir.is_dir() and subdir.name != "defect":
-                    for img_path in subdir.glob("**/*"):
-                        if img_path.is_file():
-                            dst_path = self.good_dir / f"{subdir.name}_{img_path.name}"
-                            self._resize_and_save(img_path, dst_path)
-                            good_count += 1
+                    subdir_images = [p for p in subdir.glob("**/*") if p.is_file()]
+                    if self.max_images_per_folder and len(subdir_images) > self.max_images_per_folder:
+                        subdir_images = random.sample(subdir_images, self.max_images_per_folder)
+                        self.logger.info(f"{subdir.name}画像を{len(subdir_images)}枚にサンプリング")
+                    
+                    for img_path in subdir_images:
+                        dst_path = self.good_dir / f"{subdir.name}_{img_path.name}"
+                        self._resize_and_save(img_path, dst_path)
+                        good_count += 1
 
             self.create_dataset_info(good_count, defect_count)
             self.logger.info(f"defect画像 {defect_count} 枚, good画像 {good_count} 枚を準備しました")
@@ -164,7 +175,7 @@ def main():
     parser.add_argument(
         "--move",
         action="store_true",
-        help="ファイルを移動（デフォルトはコピー）",
+        help="ファイルを移動(デフォルトはコピー)",
     )
     parser.add_argument(
         "--random_seed",
@@ -185,6 +196,12 @@ def main():
         default=[224, 224],
         help="リサイズ後の画像サイズ (default: 224 224)",
     )
+    parser.add_argument(
+        "--max_images_per_folder",
+        type=int,
+        default=None,
+        help="各フォルダから選択する最大画像枚数 (指定なしの場合は全画像を使用)",
+    )
 
     args = parser.parse_args()
 
@@ -194,6 +211,7 @@ def main():
             target_dir=args.target_dir,
             copy_mode=not args.move,
             random_seed=args.random_seed,
+            max_images_per_folder=args.max_images_per_folder,
         )
         preparer.resize_size = tuple(args.resize)
 
