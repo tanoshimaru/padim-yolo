@@ -4,6 +4,17 @@ RTSP カメラから取得した映像を使って、YOLO による人物検出�
 
 ## クイックスタート
 
+Dockerfileのcron設定部分はコメントアウトされています。自動定期実行を有効化する際はコメントアウトをはずしてください。
+
+```Dockerfile
+# # Copy cron configuration
+# COPY docker-crontab.txt /etc/cron.d/padim-yolo-cron
+
+# # Set proper permissions for cron job
+# RUN chmod 0644 /etc/cron.d/padim-yolo-cron && \
+#     crontab /etc/cron.d/padim-yolo-cron
+```
+
 ```bash
 # 1. RTSPカメラの設定（.envファイルを作成）
 cp .env.example .env  # または手動作成
@@ -230,6 +241,7 @@ python scripts/test_rtsp.py
 ### 結果ログ
 
 - `logs/results_YYYYMMDD.jsonl`: JSON 形式の処理結果
+
   ```json
   {
     "timestamp": "20250131_120000",
@@ -335,7 +347,7 @@ USERNAME=$(whoami)  # ホストのユーザー名
 
 起動時に以下のようなメッセージが表示されます：
 
-```
+```plaintext
 === RTSPカメラ異常検知システム起動 ===
 ユーザー設定: USERNAME=tano, UID=1000, GID=1000
 RTSP設定: rtsp://admin:***@192.168.1.100:554/profile2/media.smp
@@ -343,7 +355,7 @@ RTSP設定: rtsp://admin:***@192.168.1.100:554/profile2/media.smp
 
 # 備忘録
 
-```
+```bash
 python -m venv .venv --system-site-packages
 source .venv/bin/activate
 pip install anomalib[loggers] dotenv open_clip_torch
