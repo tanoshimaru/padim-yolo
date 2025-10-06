@@ -70,6 +70,8 @@ class TrainingDataPreparer:
             self.good_dir.mkdir(parents=True, exist_ok=True)
             self.defect_dir.mkdir(parents=True, exist_ok=True)
 
+            folder_stats = {}  # フォルダごとの統計
+
             # defect画像
             defect_src = self.source_dir / "defect"
             defect_count = 0
@@ -83,24 +85,30 @@ class TrainingDataPreparer:
                     dst_path = self.defect_dir / img_path.name
                     self._resize_and_save(img_path, dst_path)
                     defect_count += 1
+                
+                folder_stats["defect"] = defect_count
             else:
                 self.logger.warning(f"defectディレクトリが存在しません: {defect_src}")
 
-            # good画像（images/defect以外のサブディレクトリ配下）
+            # good画像(images/defect以外のサブディレクトリ配下)
             good_count = 0
-            for subdir in self.source_dir.iterdir():
+            for subdir in sorted(self.source_dir.iterdir()):
                 if subdir.is_dir() and subdir.name != "defect":
                     subdir_images = [p for p in subdir.glob("**/*") if p.is_file()]
                     if self.max_images_per_folder and len(subdir_images) > self.max_images_per_folder:
                         subdir_images = random.sample(subdir_images, self.max_images_per_folder)
                         self.logger.info(f"{subdir.name}画像を{len(subdir_images)}枚にサンプリング")
                     
+                    subdir_count = 0
                     for img_path in subdir_images:
                         dst_path = self.good_dir / f"{subdir.name}_{img_path.name}"
                         self._resize_and_save(img_path, dst_path)
-                        good_count += 1
+                        subdir_count += 1
+                    
+                    folder_stats[subdir.name] = subdir_count
+                    good_count += subdir_count
 
-            self.create_dataset_info(good_count, defect_count)
+            self.create_dataset_info(good_count, defect_count, folder_stats)
             self.logger.info(f"defect画像 {defect_count} 枚, good画像 {good_count} 枚を準備しました")
             self.logger.info("=== 学習データ準備完了 ===")
             return True
@@ -119,8 +127,14 @@ class TrainingDataPreparer:
         except Exception as e:
             self.logger.error(f"画像リサイズ保存失敗: {src_path} → {dst_path}: {e}")
 
-    def create_dataset_info(self, train_count: int, val_count: int):
+    def create_dataset_info(self, train_count: int, val_count: int, folder_stats: dict):
         """データセット情報ファイルを作成"""
+        
+        # フォルダごとの詳細統計を作成
+        folder_details = ""
+        for folder_name, count in sorted(folder_stats.items()):
+            folder_details += f"  - {folder_name}: {count} 枚\n"
+        
         info_content = f"""# PaDiM学習データセット情報
 
 ## 作成日時
@@ -131,13 +145,15 @@ class TrainingDataPreparer:
 - defect画像: {val_count} 枚
 - 総画像数: {train_count + val_count} 枚
 
+## フォルダごとの枚数
+{folder_details}
 ## ソース設定
 - ソースディレクトリ: {self.source_dir}
 - goodディレクトリ: {self.good_dir}
 - defectディレクトリ: {self.defect_dir}
 - 操作モード: {"コピー" if self.copy_mode else "移動"}
 - ランダムシード: {self.random_seed}
-```
+- 最大画像枚数/フォルダ: {self.max_images_per_folder if self.max_images_per_folder else "制限なし"}
 """
 
         info_path = self.target_dir / "dataset_info.md"
