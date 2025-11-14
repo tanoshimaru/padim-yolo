@@ -5,6 +5,9 @@ ARG USERNAME=appuser
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
+# グループとユーザーがすでに存在する場合に備えて、既存のユーザーとグループを削除
+RUN groupdel $USERNAME || true && userdel -r $USERNAME || true
+
 # グループとユーザーを作成
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
