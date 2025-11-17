@@ -1,4 +1,6 @@
-FROM ultralytics/ultralytics:latest-jetson-jetpack6
+# ベースイメージの指定（Jetsonの場合はlatest-jetson-jetpack6，それ以外はlatestを使用）
+# FROM ultralytics/ultralytics:latest-jetson-jetpack6
+FROM ultralytics/ultralytics:latest
 
 # ユーザーを作成
 ARG USERNAME=appuser
